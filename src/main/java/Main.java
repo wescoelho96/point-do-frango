@@ -10,7 +10,6 @@ import java.util.Locale;
 
 public class Main {
 
-    // Conexão Segura com o Supabase
     private static Connection conectarBanco() throws SQLException {
         String dbUrl = System.getenv("DATABASE_URL");
         if (dbUrl == null || dbUrl.isEmpty()) {
@@ -23,18 +22,19 @@ public class Main {
         String portEnv = System.getenv("PORT");
         int port = (portEnv != null && !portEnv.isEmpty()) ? Integer.parseInt(portEnv) : 8080;
         
-        HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
+        HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
 
         // Nossas Rotas
         server.createContext("/", new DashboardHandler());
 
-        server.setExecutor(null);
+        server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool()); 
+        
         System.out.println("=== ERP POINT DO FRANGO INICIADO NA PORTA " + port + " ===");
         server.start();
     }
 
     // =========================================================================
-    // HANDLER DO DASHBOARD (A Nova Interface Profissional)
+    // HANDLER DO DASHBOARD (A Interface Profissional Completa)
     // =========================================================================
     static class DashboardHandler implements HttpHandler {
         @Override
@@ -47,7 +47,6 @@ public class Main {
 
             StringBuilder linhasTabela = new StringBuilder();
 
-            // Busca os dados no Banco
             try (Connection conn = conectarBanco();
                  Statement stmt = conn.createStatement();
                  ResultSet rs = stmt.executeQuery("SELECT * FROM produtos ORDER BY id")) {
@@ -59,7 +58,6 @@ public class Main {
                     int quantidade = rs.getInt("quantidade");
                     double preco = rs.getDouble("preco_venda");
 
-                    // Monta cada linha da tabela já com os botões de ação
                     linhasTabela.append(String.format(Locale.US, """
                         <tr>
                             <td>%d</td>
@@ -78,7 +76,6 @@ public class Main {
                 linhasTabela.append("<tr><td colspan='6' style='color:red;'>Erro no banco: ").append(e.getMessage()).append("</td></tr>");
             }
 
-            // O nosso novo layout completo usando Text Blocks do Java 17
             String htmlCompleto = """
                 <!DOCTYPE html>
                 <html lang="pt-BR">
@@ -90,10 +87,11 @@ public class Main {
                         :root { --primary: #b91c1c; --sidebar: #1e293b; --bg: #f8fafc; --text: #334155; }
                         body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; height: 100vh; }
                         
-                        /* Menu Lateral */
-                        .sidebar { width: 250px; background: var(--sidebar); color: white; display: flex; flex-direction: column; }
+                        /* Menu Lateral Melhorado */
+                        .sidebar { width: 260px; background: var(--sidebar); color: white; display: flex; flex-direction: column; }
                         .sidebar h2 { text-align: center; padding: 20px 0; margin: 0; background: #0f172a; font-size: 1.2rem; }
-                        .menu-item { padding: 15px 20px; color: #cbd5e1; text-decoration: none; border-bottom: 1px solid #334155; transition: 0.2s; }
+                        .menu-category { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; padding: 15px 20px 5px; font-weight: bold; letter-spacing: 0.5px;}
+                        .menu-item { padding: 12px 20px; color: #cbd5e1; text-decoration: none; border-bottom: 1px solid #334155; transition: 0.2s; font-size: 0.95rem; }
                         .menu-item:hover, .menu-item.active { background: var(--primary); color: white; }
                         
                         /* Área Principal */
@@ -113,25 +111,45 @@ public class Main {
                         .btn-blue { background: #3b82f6; }
                         .btn-green { background: #10b981; }
                         .btn-sm { padding: 6px 10px; font-size: 0.85rem; margin-right: 5px; }
+                        
+                        .user-profile { margin-top: auto; padding: 15px; background: #0f172a; text-align: center; font-size: 0.85rem; color: #10b981; }
                     </style>
                 </head>
                 <body>
 
-                    <!-- Menu Lateral -->
+                    <!-- Menu Lateral com a sua Visão de Negócio -->
                     <div class="sidebar">
                         <h2>🍗 Point do Frango</h2>
-                        <a href="#" class="menu-item">📊 Dashboard Financeiro</a>
-                        <a href="#" class="menu-item">🛒 PDV / Caixa</a>
+                        
+                        <div class="menu-category">Operação & Vendas</div>
+                        <a href="#" class="menu-item">🛒 Caixa</a>
+                        <a href="#" class="menu-item">🖨️ Pedidos Cozinha / Mesas</a>
+                        
+                        <div class="menu-category">Estoque & Produtos</div>
                         <a href="#" class="menu-item active">📦 Controle de Estoque</a>
-                        <a href="#" class="menu-item">🛵 Entregadores</a>
-                        <a href="#" class="menu-item">⚙️ Configurações</a>
+                        
+                        <div class="menu-category">Financeiro & Despesas</div>
+                        <a href="#" class="menu-item">📊 Dashboard de Lucro</a>
+                        <a href="#" class="menu-item">💸 Acerto Motoboy / Taxas</a>
+                        <a href="#" class="menu-item">🤝 Diária Freelancers</a>
+                        
+                        <div class="menu-category">Integrações & Sistema</div>
+                        <a href="#" class="menu-item">📱 iFood / 99Food / WhatsApp</a>
+                        <a href="#" class="menu-item">⚙️ Acesso e Permissões</a>
+                        
+                        <div class="user-profile">
+                            👤 Acesso logado: <b>PROPRIETÁRIO</b>
+                        </div>
                     </div>
 
                     <!-- Conteúdo Central -->
                     <div class="main-content">
                         <div class="header">
-                            <h2>Gestão de Estoque e Cardápio</h2>
-                            <button class="btn btn-primary" onclick="alert('Logo abriremos a tela de Novo Produto!')">➕ Novo Produto</button>
+                            <div>
+                                <h2 style="margin: 0;">Gestão de Estoque e Cardápio</h2>
+                                <p style="color: #64748b; margin-top: 5px;">Módulo 1 - Estrutura Base</p>
+                            </div>
+                            <button class="btn btn-primary" onclick="alert('Logo abriremos a tela para cadastrar Porções, Combos e Bebidas!')">➕ Novo Produto</button>
                         </div>
 
                         <div class="card">
@@ -147,7 +165,7 @@ public class Main {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    %s <!-- Aqui o Java injeta as linhas da tabela automaticamente -->
+                                    %s <!-- Aqui o Java injeta os dados do banco -->
                                 </tbody>
                             </table>
                         </div>
@@ -155,11 +173,13 @@ public class Main {
 
                     <script>
                         function editarProduto(id) {
-                            alert("Editando o produto ID: " + id + "\\n\\nNa próxima etapa, isso vai abrir a tela para mudar o nome e o preço!");
+                            alert("Módulo em construção: Aqui você poderá alterar o nome e o valor de venda do produto ID " + id);
                         }
                         function reporEstoque(id) {
-                            let qtd = prompt("Quantas unidades chegaram do fornecedor para o produto " + id + "?");
-                            if(qtd) alert("Vamos somar " + qtd + " unidades ao estoque. Logo conectaremos isso ao banco!");
+                            let qtd = prompt("Quantas unidades CHEGARAM do fornecedor/mercado para somar ao estoque deste produto?");
+                            if(qtd && !isNaN(qtd)) {
+                                alert("Excelente! Logo o sistema irá somar " + qtd + " unidades no seu estoque do banco de dados!");
+                            }
                         }
                     </script>
                 </body>
