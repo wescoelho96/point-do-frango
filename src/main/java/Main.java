@@ -23,7 +23,10 @@ public class Main {
         int port = (portEnv != null && !portEnv.isEmpty()) ? Integer.parseInt(portEnv) : 8080;
         
         HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
-        server.createContext("/", new DashboardHandler());
+
+        server.createContext("/", new DashboardHandler()); 
+        server.createContext("/repor", new ReporEstoqueHandler()); 
+        
         server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool()); 
         
         System.out.println("=== ERP POINT DO FRANGO INICIADO NA PORTA " + port + " ===");
@@ -71,7 +74,6 @@ public class Main {
                 linhasTabela.append("<tr><td colspan='6' style='color:red;'>Erro no banco: ").append(e.getMessage()).append("</td></tr>");
             }
 
-            // O nosso HTML agora está protegido contra o bug da porcentagem!
             String htmlCompleto = """
                 <!DOCTYPE html>
                 <html lang="pt-BR">
@@ -161,10 +163,25 @@ public class Main {
                         function editarProduto(id) {
                             alert("Módulo em construção: Aqui você poderá alterar o nome e o valor de venda do produto ID " + id);
                         }
+                        
+                        // NOVO SCRIPT PARA O BOTÃO REPOR
                         function reporEstoque(id) {
-                            let qtd = prompt("Quantas unidades CHEGARAM do fornecedor/mercado para somar ao estoque deste produto?");
-                            if(qtd && !isNaN(qtd)) {
-                                alert("Excelente! Logo o sistema irá somar " + qtd + " unidades no seu estoque do banco de dados!");
+                            let qtd = prompt("Quantas unidades CHEGARAM do fornecedor para somar ao estoque atual?");
+                            
+                            // Verifica se o dono digitou um numero valido maior que zero
+                            if (qtd && !isNaN(qtd) && parseInt(qtd) > 0) {
+                                // Manda a requisição invisível para a rota /repor no Java
+                                fetch('/repor?id=' + id + '&qtd=' + parseInt(qtd), { method: 'POST' })
+                                .then(response => {
+                                    if(response.ok) {
+                                        // Sucesso! Recarrega a página para atualizar o número na tela
+                                        window.location.reload();
+                                    } else {
+                                        alert("Erro de comunicação com o servidor ao atualizar estoque.");
+                                    }
+                                });
+                            } else if (qtd) {
+                                alert("Por favor, digite um número válido.");
                             }
                         }
                     </script>
@@ -178,6 +195,61 @@ public class Main {
             OutputStream os = exchange.getResponseBody();
             os.write(res); 
             os.close();
+        }
+    }
+
+    static class ReporEstoqueHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            // Verifica se a requisição é do tipo POST (Ação segura do botão)
+            if ("POST".equals(exchange.getRequestMethod())) {
+                
+                String query = exchange.getRequestURI().getQuery();
+                int id = -1;
+                int qtd = 0;
+
+
+                try {
+                    if (query != null) {
+                        String[] pares = query.split("&");
+                        for (String par : pares) {
+                            String[] valores = par.split("=");
+                            if (valores.length == 2) {
+                                if (valores[0].equals("id")) id = Integer.parseInt(valores[1]);
+                                if (valores[0].equals("qtd")) qtd = Integer.parseInt(valores[1]);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    System.out.println("Erro ao ler parametros: " + e.getMessage());
+                }
+
+                if (id != -1 && qtd > 0) {
+
+                    try (Connection conn = conectarBanco();
+                         PreparedStatement pstmt = conn.prepareStatement(
+                             "UPDATE produtos SET quantidade = quantidade + ? WHERE id = ?")) {
+                        
+                        pstmt.setInt(1, qtd);
+                        pstmt.setInt(2, id);
+                        pstmt.executeUpdate();
+
+
+                        exchange.sendResponseHeaders(200, -1);
+                        exchange.close();
+                        
+                    } catch (SQLException e) {
+                        exchange.sendResponseHeaders(500, -1); // Erro de banco
+                        exchange.close();
+                    }
+                } else {
+                    exchange.sendResponseHeaders(400, -1); // Dados incorretos
+                    exchange.close();
+                }
+            } else {
+                exchange.sendResponseHeaders(405, -1); // Metodo não permitido
+                exchange.close();
+            }
         }
     }
 }
