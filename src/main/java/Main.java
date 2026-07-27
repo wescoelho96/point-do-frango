@@ -13,7 +13,6 @@ import java.util.Map;
 
 public class Main {
 
-
     private static Connection conectarBanco() throws SQLException {
         String dbUrl = System.getenv("DATABASE_URL");
         if (dbUrl == null || dbUrl.isEmpty()) {
@@ -22,27 +21,35 @@ public class Main {
         return DriverManager.getConnection(dbUrl);
     }
 
+
+    private static void responderErro(HttpExchange exchange, int codigoErro, String mensagem) throws IOException {
+        System.out.println("ERRO DETECTADO: " + mensagem); 
+        byte[] bytes = mensagem.getBytes(StandardCharsets.UTF_8);
+        exchange.sendResponseHeaders(codigoErro, bytes.length);
+        OutputStream os = exchange.getResponseBody();
+        os.write(bytes);
+        os.close();
+    }
+
     public static void main(String[] args) throws IOException {
         String portEnv = System.getenv("PORT");
         int port = (portEnv != null && !portEnv.isEmpty()) ? Integer.parseInt(portEnv) : 8080;
         
         HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
         
-
         server.createContext("/", new DashboardHandler()); 
         server.createContext("/repor", new ReporEstoqueHandler()); 
-        server.createContext("/novo", new NovoProdutoHandler()); // NOVA ROTA: Cadastro
+        server.createContext("/novo", new NovoProdutoHandler()); 
         
         server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool()); 
-        
         System.out.println("=== ERP POINT DO FRANGO INICIADO NA PORTA " + port + " ===");
         server.start();
     }
 
+
     static class DashboardHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            
             if ("HEAD".equals(exchange.getRequestMethod())) {
                 exchange.sendResponseHeaders(200, -1);
                 exchange.close();
@@ -111,7 +118,6 @@ public class Main {
                         .btn-sm { padding: 6px 10px; font-size: 0.85rem; margin-right: 5px; }
                         .user-profile { margin-top: auto; padding: 15px; background: #0f172a; text-align: center; font-size: 0.85rem; color: #10b981; }
                         
-                        /* CSS DO MODAL */
                         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
                         .modal-box { background: white; padding: 25px; border-radius: 8px; width: 400px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
                         .modal-box h3 { margin-top: 0; margin-bottom: 20px; color: var(--text); }
@@ -150,7 +156,6 @@ public class Main {
                                 <h2 style="margin: 0;">Gestão de Estoque e Cardápio</h2>
                                 <p style="color: #64748b; margin-top: 5px;">Módulo 1 - Estrutura Base</p>
                             </div>
-                            <!-- Botão agora abre o Modal -->
                             <button class="btn btn-primary" onclick="abrirModal()">➕ Novo Produto</button>
                         </div>
                         <div class="card">
@@ -172,7 +177,6 @@ public class Main {
                         </div>
                     </div>
 
-                    <!-- ESTRUTURA DO MODAL (Fica escondido até clicar no botão) -->
                     <div class="modal-overlay" id="modalNovoProduto">
                         <div class="modal-box">
                             <h3>Cadastrar Novo Produto</h3>
@@ -205,26 +209,19 @@ public class Main {
                     </div>
 
                     <script>
-                        // Lógica de Interface
                         function abrirModal() { document.getElementById('modalNovoProduto').style.display = 'flex'; }
                         function fecharModal() { document.getElementById('modalNovoProduto').style.display = 'none'; }
 
-                        function editarProduto(id) {
-                            alert("Módulo em construção: Aqui você poderá alterar o nome e o valor de venda do produto ID " + id);
-                        }
+                        function editarProduto(id) { alert("Em breve!"); }
                         
                         function reporEstoque(id) {
-                            let qtd = prompt("Quantas unidades CHEGARAM do fornecedor para somar ao estoque atual?");
+                            let qtd = prompt("Quantas unidades chegaram?");
                             if (qtd && !isNaN(qtd) && parseInt(qtd) > 0) {
                                 fetch('/repor?id=' + id + '&qtd=' + parseInt(qtd), { method: 'POST' })
-                                .then(response => {
-                                    if(response.ok) { window.location.reload(); } 
-                                    else { alert("❌ Erro ao salvar no banco."); }
-                                });
+                                .then(response => { if(response.ok) { window.location.reload(); } });
                             }
                         }
 
-                        // NOVA FUNÇÃO AJAX: Envia os dados do formulário para o Java
                         function salvarNovoProduto() {
                             let nome = document.getElementById('novoNome').value;
                             let categoria = document.getElementById('novaCategoria').value;
@@ -236,7 +233,6 @@ public class Main {
                                 return;
                             }
 
-                            // Empacota os dados para envio (formato padrão da web)
                             let dadosFormulario = new URLSearchParams({
                                 'nome': nome,
                                 'categoria': categoria,
@@ -244,18 +240,23 @@ public class Main {
                                 'preco': preco
                             });
 
+                            // ATUALIZAÇÃO SÊNIOR: Trata e exibe o erro exato que o servidor enviar!
                             fetch('/novo', { 
                                 method: 'POST', 
                                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                                body: dadosFormulario
+                                body: dadosFormulario.toString()
                             })
-                            .then(response => {
+                            .then(async response => {
                                 if(response.ok) {
                                     alert("✅ Produto cadastrado com sucesso!");
                                     window.location.reload();
                                 } else {
-                                    alert("❌ Erro ao cadastrar. Tente novamente.");
+                                    let msgErro = await response.text();
+                                    alert("❌ Falha detalhada: " + msgErro);
                                 }
+                            })
+                            .catch(error => {
+                                alert("❌ Servidor offline ou erro de internet.");
                             });
                         }
                     </script>
@@ -295,15 +296,15 @@ public class Main {
                 if (id != -1 && qtd > 0) {
                     try (Connection conn = conectarBanco(); Statement stmt = conn.createStatement()) {
                         String sql = "UPDATE produtos SET quantidade = quantidade + " + qtd + " WHERE id = " + id;
-                        int linhasAlteradas = stmt.executeUpdate(sql);
-                        if (linhasAlteradas > 0) exchange.sendResponseHeaders(200, -1);
+                        int linhas = stmt.executeUpdate(sql);
+                        if (linhas > 0) exchange.sendResponseHeaders(200, -1);
                         else exchange.sendResponseHeaders(404, -1);
-                        exchange.close();
                     } catch (SQLException e) {
-                        exchange.sendResponseHeaders(500, -1); exchange.close();
+                        exchange.sendResponseHeaders(500, -1);
                     }
-                } else { exchange.sendResponseHeaders(400, -1); exchange.close(); }
-            } else { exchange.sendResponseHeaders(405, -1); exchange.close(); }
+                } else { exchange.sendResponseHeaders(400, -1); }
+            } else { exchange.sendResponseHeaders(405, -1); }
+            exchange.close();
         }
     }
 
@@ -312,56 +313,57 @@ public class Main {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if ("POST".equals(exchange.getRequestMethod())) {
-                
-
-                String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-                Map<String, String> parametros = new HashMap<>();
-                
-                for (String param : body.split("&")) {
-                    String[] pair = param.split("=");
-                    if (pair.length > 1) {
-
-                        parametros.put(pair[0], URLDecoder.decode(pair[1], StandardCharsets.UTF_8));
-                    }
-                }
-
-                String nome = parametros.get("nome");
-                String categoria = parametros.get("categoria");
-                String quantidadeStr = parametros.get("quantidade");
-                String precoStr = parametros.get("preco");
-
-                if (nome != null && categoria != null && quantidadeStr != null && precoStr != null) {
-                    try {
-                        int quantidade = Integer.parseInt(quantidadeStr);
-                        double preco = Double.parseDouble(precoStr);
-
-
-                        String sql = "INSERT INTO produtos (nome, categoria, quantidade, preco_venda) VALUES (?, ?, ?, ?)";
-                        
-                        try (Connection conn = conectarBanco();
-                             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-                            
-                            pstmt.setString(1, nome);
-                            pstmt.setString(2, categoria);
-                            pstmt.setInt(3, quantidade);
-                            pstmt.setDouble(4, preco);
-                            
-                            pstmt.executeUpdate();
-                            
-                            exchange.sendResponseHeaders(200, -1); // Sucesso!
-                            
-                        } catch (SQLException e) {
-                            System.out.println("ERRO SQL: " + e.getMessage());
-                            exchange.sendResponseHeaders(500, -1);
+                try {
+                    String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+                    Map<String, String> parametros = new HashMap<>();
+                    
+                    for (String param : body.split("&")) {
+                        String[] pair = param.split("=");
+                        if (pair.length > 1) {
+                            parametros.put(pair[0], URLDecoder.decode(pair[1], StandardCharsets.UTF_8));
                         }
-                    } catch (NumberFormatException e) {
-                        exchange.sendResponseHeaders(400, -1); // Erro de digitação
                     }
-                } else {
-                    exchange.sendResponseHeaders(400, -1); // Faltou dados
+
+                    String nome = parametros.get("nome");
+                    String categoria = parametros.get("categoria");
+                    String quantidadeStr = parametros.get("quantidade");
+                    String precoStr = parametros.get("preco");
+
+                    if (nome == null || categoria == null || quantidadeStr == null || precoStr == null) {
+                        responderErro(exchange, 400, "Dados do formulário estão incompletos.");
+                        return;
+                    }
+
+                    int quantidade = Integer.parseInt(quantidadeStr);
+
+                    double preco = Double.parseDouble(precoStr.replace(",", "."));
+
+                    String sql = "INSERT INTO produtos (nome, categoria, quantidade, preco_venda) VALUES (?, ?, ?, ?)";
+                    
+                    try (Connection conn = conectarBanco();
+                         PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                        
+                        pstmt.setString(1, nome);
+                        pstmt.setString(2, categoria);
+                        pstmt.setInt(3, quantidade);
+                        pstmt.setDouble(4, preco);
+                        
+                        pstmt.executeUpdate();
+                        exchange.sendResponseHeaders(200, -1); 
+                        
+                    } catch (SQLException e) {
+
+                        responderErro(exchange, 500, "Problema no Supabase: " + e.getMessage());
+                        return;
+                    }
+
+                } catch (NumberFormatException e) {
+                    responderErro(exchange, 400, "O valor ou preço digitado possui formato inválido.");
+                } catch (Exception e) {
+                    responderErro(exchange, 500, "Erro interno de comunicação: " + e.getMessage());
                 }
             } else {
-                exchange.sendResponseHeaders(405, -1); // Método não permitido
+                responderErro(exchange, 405, "Método não permitido.");
             }
             exchange.close();
         }
