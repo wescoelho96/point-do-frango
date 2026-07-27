@@ -21,7 +21,6 @@ public class Main {
         return DriverManager.getConnection(dbUrl);
     }
 
-
     private static void responderErro(HttpExchange exchange, int codigoErro, String mensagem) throws IOException {
         System.out.println("ERRO DETECTADO: " + mensagem); 
         byte[] bytes = mensagem.getBytes(StandardCharsets.UTF_8);
@@ -45,7 +44,6 @@ public class Main {
         System.out.println("=== ERP POINT DO FRANGO INICIADO NA PORTA " + port + " ===");
         server.start();
     }
-
 
     static class DashboardHandler implements HttpHandler {
         @Override
@@ -119,9 +117,9 @@ public class Main {
                         .user-profile { margin-top: auto; padding: 15px; background: #0f172a; text-align: center; font-size: 0.85rem; color: #10b981; }
                         
                         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
-                        .modal-box { background: white; padding: 25px; border-radius: 8px; width: 400px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+                        .modal-box { background: white; padding: 25px; border-radius: 8px; width: 400px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-height: 90vh; overflow-y: auto; }
                         .modal-box h3 { margin-top: 0; margin-bottom: 20px; color: var(--text); }
-                        .form-group { margin-bottom: 15px; }
+                        .form-group { margin-bottom: 12px; }
                         .form-group label { display: block; margin-bottom: 5px; font-size: 0.9rem; font-weight: bold; }
                         .form-group input, .form-group select { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; }
                         .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
@@ -198,8 +196,12 @@ public class Main {
                                 <input type="number" id="novaQtd" placeholder="Ex: 10">
                             </div>
                             <div class="form-group">
+                                <label>Preço de Custo (R$)</label>
+                                <input type="number" id="novoCusto" step="0.01" placeholder="Ex: 4.50">
+                            </div>
+                            <div class="form-group">
                                 <label>Preço de Venda (R$)</label>
-                                <input type="number" id="novoPreco" step="0.01" placeholder="Ex: 25.50">
+                                <input type="number" id="novoPreco" step="0.01" placeholder="Ex: 9.00">
                             </div>
                             <div class="modal-actions">
                                 <button class="btn btn-gray" onclick="fecharModal()">Cancelar</button>
@@ -226,10 +228,11 @@ public class Main {
                             let nome = document.getElementById('novoNome').value;
                             let categoria = document.getElementById('novaCategoria').value;
                             let qtd = document.getElementById('novaQtd').value;
+                            let custo = document.getElementById('novoCusto').value;
                             let preco = document.getElementById('novoPreco').value;
 
-                            if(!nome || !qtd || !preco) {
-                                alert("Preencha todos os campos!");
+                            if(!nome || !qtd || !preco || !custo) {
+                                alert("Preencha todos os campos, inclusive o Preço de Custo!");
                                 return;
                             }
 
@@ -237,10 +240,10 @@ public class Main {
                                 'nome': nome,
                                 'categoria': categoria,
                                 'quantidade': qtd,
+                                'custo': custo,
                                 'preco': preco
                             });
 
-                            // ATUALIZAÇÃO SÊNIOR: Trata e exibe o erro exato que o servidor enviar!
                             fetch('/novo', { 
                                 method: 'POST', 
                                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -273,7 +276,6 @@ public class Main {
             os.close();
         }
     }
-
 
     static class ReporEstoqueHandler implements HttpHandler {
         @Override
@@ -327,18 +329,20 @@ public class Main {
                     String nome = parametros.get("nome");
                     String categoria = parametros.get("categoria");
                     String quantidadeStr = parametros.get("quantidade");
+                    String custoStr = parametros.get("custo");
                     String precoStr = parametros.get("preco");
 
-                    if (nome == null || categoria == null || quantidadeStr == null || precoStr == null) {
+                    if (nome == null || categoria == null || quantidadeStr == null || precoStr == null || custoStr == null) {
                         responderErro(exchange, 400, "Dados do formulário estão incompletos.");
                         return;
                     }
 
                     int quantidade = Integer.parseInt(quantidadeStr);
-
+                    double custo = Double.parseDouble(custoStr.replace(",", "."));
                     double preco = Double.parseDouble(precoStr.replace(",", "."));
 
-                    String sql = "INSERT INTO produtos (nome, categoria, quantidade, preco_venda) VALUES (?, ?, ?, ?)";
+
+                    String sql = "INSERT INTO produtos (nome, categoria, quantidade, preco_custo, preco_venda) VALUES (?, ?, ?, ?, ?)";
                     
                     try (Connection conn = conectarBanco();
                          PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -346,13 +350,13 @@ public class Main {
                         pstmt.setString(1, nome);
                         pstmt.setString(2, categoria);
                         pstmt.setInt(3, quantidade);
-                        pstmt.setDouble(4, preco);
+                        pstmt.setDouble(4, custo);
+                        pstmt.setDouble(5, preco);
                         
                         pstmt.executeUpdate();
-                        exchange.sendResponseHeaders(200, -1); 
+                        exchange.sendResponseHeaders(200, -1); // Sucesso Total
                         
                     } catch (SQLException e) {
-
                         responderErro(exchange, 500, "Problema no Supabase: " + e.getMessage());
                         return;
                     }
