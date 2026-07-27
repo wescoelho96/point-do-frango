@@ -22,11 +22,12 @@ public class Main {
         String portEnv = System.getenv("PORT");
         int port = (portEnv != null && !portEnv.isEmpty()) ? Integer.parseInt(portEnv) : 8080;
         
+        // 0.0.0.0 garante que o roteador do Render consiga acessar
         HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
 
         server.createContext("/", new DashboardHandler());
 
-        server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool()); 
+        server.setExecutor(null); 
         
         System.out.println("=== ERP POINT DO FRANGO INICIADO NA PORTA " + port + " ===");
         server.start();
@@ -35,8 +36,11 @@ public class Main {
     static class DashboardHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
+            
+            // BUG CORRIGIDO AQUI: O Render não vai mais travar (Erro 502)!
             if ("HEAD".equals(exchange.getRequestMethod())) {
                 exchange.sendResponseHeaders(200, -1);
+                exchange.close(); // <-- A linha mágica que faltava
                 return;
             }
 
