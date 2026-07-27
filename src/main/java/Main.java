@@ -24,7 +24,6 @@ public class Main {
         
         HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
 
-        // Nossas Rotas
         server.createContext("/", new DashboardHandler());
 
         server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool()); 
@@ -33,13 +32,9 @@ public class Main {
         server.start();
     }
 
-    // =========================================================================
-    // HANDLER DO DASHBOARD (A Interface Profissional Completa)
-    // =========================================================================
     static class DashboardHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            // Ignora o "ping" do Render para limpar os logs
             if ("HEAD".equals(exchange.getRequestMethod())) {
                 exchange.sendResponseHeaders(200, -1);
                 return;
@@ -87,19 +82,16 @@ public class Main {
                         :root { --primary: #b91c1c; --sidebar: #1e293b; --bg: #f8fafc; --text: #334155; }
                         body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; height: 100vh; }
                         
-                        /* Menu Lateral Melhorado */
                         .sidebar { width: 260px; background: var(--sidebar); color: white; display: flex; flex-direction: column; }
                         .sidebar h2 { text-align: center; padding: 20px 0; margin: 0; background: #0f172a; font-size: 1.2rem; }
                         .menu-category { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; padding: 15px 20px 5px; font-weight: bold; letter-spacing: 0.5px;}
                         .menu-item { padding: 12px 20px; color: #cbd5e1; text-decoration: none; border-bottom: 1px solid #334155; transition: 0.2s; font-size: 0.95rem; }
                         .menu-item:hover, .menu-item.active { background: var(--primary); color: white; }
                         
-                        /* Área Principal */
                         .main-content { flex: 1; padding: 30px; overflow-y: auto; }
                         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
                         .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
                         
-                        /* Tabela e Botões */
                         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
                         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }
                         th { background: #f1f5f9; font-weight: 600; }
@@ -117,7 +109,6 @@ public class Main {
                 </head>
                 <body>
 
-                    <!-- Menu Lateral com a sua Visão de Negócio -->
                     <div class="sidebar">
                         <h2>🍗 Point do Frango</h2>
                         
@@ -142,7 +133,6 @@ public class Main {
                         </div>
                     </div>
 
-                    <!-- Conteúdo Central -->
                     <div class="main-content">
                         <div class="header">
                             <div>
@@ -165,7 +155,7 @@ public class Main {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    %s <!-- Aqui o Java injeta os dados do banco -->
+                                    %s
                                 </tbody>
                             </table>
                         </div>
