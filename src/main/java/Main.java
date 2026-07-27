@@ -22,7 +22,6 @@ public class Main {
     }
 
     private static void responderErro(HttpExchange exchange, int codigoErro, String mensagem) throws IOException {
-        System.out.println("ERRO DETECTADO: " + mensagem); 
         byte[] bytes = mensagem.getBytes(StandardCharsets.UTF_8);
         exchange.sendResponseHeaders(codigoErro, bytes.length);
         OutputStream os = exchange.getResponseBody();
@@ -39,9 +38,9 @@ public class Main {
         server.createContext("/", new DashboardHandler()); 
         server.createContext("/repor", new ReporEstoqueHandler()); 
         server.createContext("/novo", new NovoProdutoHandler()); 
+        server.createContext("/editar", new EditarProdutoHandler()); 
         
         server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool()); 
-        System.out.println("=== ERP POINT DO FRANGO INICIADO NA PORTA " + port + " ===");
         server.start();
     }
 
@@ -75,14 +74,19 @@ public class Main {
                             <td>%d un</td>
                             <td>R$ %.2f</td>
                             <td>
-                                <button class="btn btn-sm btn-blue" onclick="editarProduto(%d)">✏️ Editar</button>
+                                <button class="btn btn-sm btn-blue" 
+                                        data-id="%d" 
+                                        data-nome="%s" 
+                                        data-categoria="%s" 
+                                        data-preco="%.2f" 
+                                        onclick="abrirModalEditar(this)">✏️ Editar</button>
                                 <button class="btn btn-sm btn-green" onclick="reporEstoque(%d)">📦 Repor</button>
                             </td>
                         </tr>
-                        """, id, nome, categoria, quantidade, preco, id, id));
+                        """, id, nome, categoria, quantidade, preco, id, nome.replace("\"", "&quot;"), categoria, preco, id));
                 }
             } catch (Exception e) {
-                linhasTabela.append("<tr><td colspan='6' style='color:red;'>Erro no banco: ").append(e.getMessage()).append("</td></tr>");
+                linhasTabela.append("<tr><td colspan='6' style='color:red;'>Erro: ").append(e.getMessage()).append("</td></tr>");
             }
 
             String htmlCompleto = """
@@ -180,7 +184,7 @@ public class Main {
                             <h3>Cadastrar Novo Produto</h3>
                             <div class="form-group">
                                 <label>Nome do Produto</label>
-                                <input type="text" id="novoNome" placeholder="Ex: Porção de Mandioca">
+                                <input type="text" id="novoNome">
                             </div>
                             <div class="form-group">
                                 <label>Categoria</label>
@@ -193,15 +197,15 @@ public class Main {
                             </div>
                             <div class="form-group">
                                 <label>Quantidade em Estoque (Unidades)</label>
-                                <input type="number" id="novaQtd" placeholder="Ex: 10">
+                                <input type="number" id="novaQtd">
                             </div>
                             <div class="form-group">
                                 <label>Preço de Custo (R$)</label>
-                                <input type="number" id="novoCusto" step="0.01" placeholder="Ex: 4.50">
+                                <input type="number" id="novoCusto" step="0.01">
                             </div>
                             <div class="form-group">
                                 <label>Preço de Venda (R$)</label>
-                                <input type="number" id="novoPreco" step="0.01" placeholder="Ex: 9.00">
+                                <input type="number" id="novoPreco" step="0.01">
                             </div>
                             <div class="modal-actions">
                                 <button class="btn btn-gray" onclick="fecharModal()">Cancelar</button>
@@ -210,11 +214,46 @@ public class Main {
                         </div>
                     </div>
 
+                    <div class="modal-overlay" id="modalEditarProduto">
+                        <div class="modal-box">
+                            <h3>Editar Produto</h3>
+                            <input type="hidden" id="editId">
+                            <div class="form-group">
+                                <label>Nome do Produto</label>
+                                <input type="text" id="editNome">
+                            </div>
+                            <div class="form-group">
+                                <label>Categoria</label>
+                                <select id="editCategoria">
+                                    <option value="Porção">Porção</option>
+                                    <option value="Frango">Frango</option>
+                                    <option value="Bebida">Bebida</option>
+                                    <option value="Combo">Combo</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Preço de Venda (R$)</label>
+                                <input type="number" id="editPreco" step="0.01">
+                            </div>
+                            <div class="modal-actions">
+                                <button class="btn btn-gray" onclick="fecharModalEditar()">Cancelar</button>
+                                <button class="btn btn-blue" onclick="salvarEdicaoProduto()">Atualizar Produto</button>
+                            </div>
+                        </div>
+                    </div>
+
                     <script>
                         function abrirModal() { document.getElementById('modalNovoProduto').style.display = 'flex'; }
                         function fecharModal() { document.getElementById('modalNovoProduto').style.display = 'none'; }
+                        function fecharModalEditar() { document.getElementById('modalEditarProduto').style.display = 'none'; }
 
-                        function editarProduto(id) { alert("Em breve!"); }
+                        function abrirModalEditar(btn) {
+                            document.getElementById('editId').value = btn.getAttribute('data-id');
+                            document.getElementById('editNome').value = btn.getAttribute('data-nome');
+                            document.getElementById('editCategoria').value = btn.getAttribute('data-categoria');
+                            document.getElementById('editPreco').value = btn.getAttribute('data-preco');
+                            document.getElementById('modalEditarProduto').style.display = 'flex';
+                        }
                         
                         function reporEstoque(id) {
                             let qtd = prompt("Quantas unidades chegaram?");
@@ -231,35 +270,35 @@ public class Main {
                             let custo = document.getElementById('novoCusto').value;
                             let preco = document.getElementById('novoPreco').value;
 
-                            if(!nome || !qtd || !preco || !custo) {
-                                alert("Preencha todos os campos, inclusive o Preço de Custo!");
-                                return;
-                            }
+                            if(!nome || !qtd || !preco || !custo) return;
 
-                            let dadosFormulario = new URLSearchParams({
-                                'nome': nome,
-                                'categoria': categoria,
-                                'quantidade': qtd,
-                                'custo': custo,
-                                'preco': preco
+                            let dados = new URLSearchParams({
+                                'nome': nome, 'categoria': categoria, 'quantidade': qtd, 'custo': custo, 'preco': preco
                             });
 
-                            fetch('/novo', { 
-                                method: 'POST', 
-                                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                                body: dadosFormulario.toString()
-                            })
+                            fetch('/novo', { method: 'POST', body: dados.toString() })
                             .then(async response => {
-                                if(response.ok) {
-                                    alert("✅ Produto cadastrado com sucesso!");
-                                    window.location.reload();
-                                } else {
-                                    let msgErro = await response.text();
-                                    alert("❌ Falha detalhada: " + msgErro);
-                                }
-                            })
-                            .catch(error => {
-                                alert("❌ Servidor offline ou erro de internet.");
+                                if(response.ok) window.location.reload();
+                                else alert(await response.text());
+                            });
+                        }
+
+                        function salvarEdicaoProduto() {
+                            let id = document.getElementById('editId').value;
+                            let nome = document.getElementById('editNome').value;
+                            let categoria = document.getElementById('editCategoria').value;
+                            let preco = document.getElementById('editPreco').value;
+
+                            if(!nome || !preco) return;
+
+                            let dados = new URLSearchParams({
+                                'id': id, 'nome': nome, 'categoria': categoria, 'preco': preco
+                            });
+
+                            fetch('/editar', { method: 'POST', body: dados.toString() })
+                            .then(async response => {
+                                if(response.ok) window.location.reload();
+                                else alert(await response.text());
                             });
                         }
                     </script>
@@ -298,18 +337,14 @@ public class Main {
                 if (id != -1 && qtd > 0) {
                     try (Connection conn = conectarBanco(); Statement stmt = conn.createStatement()) {
                         String sql = "UPDATE produtos SET quantidade = quantidade + " + qtd + " WHERE id = " + id;
-                        int linhas = stmt.executeUpdate(sql);
-                        if (linhas > 0) exchange.sendResponseHeaders(200, -1);
+                        if (stmt.executeUpdate(sql) > 0) exchange.sendResponseHeaders(200, -1);
                         else exchange.sendResponseHeaders(404, -1);
-                    } catch (SQLException e) {
-                        exchange.sendResponseHeaders(500, -1);
-                    }
+                    } catch (SQLException e) { exchange.sendResponseHeaders(500, -1); }
                 } else { exchange.sendResponseHeaders(400, -1); }
             } else { exchange.sendResponseHeaders(405, -1); }
             exchange.close();
         }
     }
-
 
     static class NovoProdutoHandler implements HttpHandler {
         @Override
@@ -317,58 +352,66 @@ public class Main {
             if ("POST".equals(exchange.getRequestMethod())) {
                 try {
                     String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-                    Map<String, String> parametros = new HashMap<>();
-                    
-                    for (String param : body.split("&")) {
-                        String[] pair = param.split("=");
-                        if (pair.length > 1) {
-                            parametros.put(pair[0], URLDecoder.decode(pair[1], StandardCharsets.UTF_8));
-                        }
+                    Map<String, String> param = new HashMap<>();
+                    for (String p : body.split("&")) {
+                        String[] pair = p.split("=");
+                        if (pair.length > 1) param.put(pair[0], URLDecoder.decode(pair[1], StandardCharsets.UTF_8));
                     }
 
-                    String nome = parametros.get("nome");
-                    String categoria = parametros.get("categoria");
-                    String quantidadeStr = parametros.get("quantidade");
-                    String custoStr = parametros.get("custo");
-                    String precoStr = parametros.get("preco");
-
-                    if (nome == null || categoria == null || quantidadeStr == null || precoStr == null || custoStr == null) {
-                        responderErro(exchange, 400, "Dados do formulário estão incompletos.");
-                        return;
+                    if (param.get("nome") == null || param.get("categoria") == null || param.get("quantidade") == null || param.get("preco") == null || param.get("custo") == null) {
+                        responderErro(exchange, 400, "Dados incompletos."); return;
                     }
 
-                    int quantidade = Integer.parseInt(quantidadeStr);
-                    double custo = Double.parseDouble(custoStr.replace(",", "."));
-                    double preco = Double.parseDouble(precoStr.replace(",", "."));
-
+                    int qtd = Integer.parseInt(param.get("quantidade"));
+                    double custo = Double.parseDouble(param.get("custo").replace(",", "."));
+                    double preco = Double.parseDouble(param.get("preco").replace(",", "."));
 
                     String sql = "INSERT INTO produtos (nome, categoria, quantidade, preco_custo, preco_venda) VALUES (?, ?, ?, ?, ?)";
-                    
-                    try (Connection conn = conectarBanco();
-                         PreparedStatement pstmt = conn.prepareStatement(sql)) {
-                        
-                        pstmt.setString(1, nome);
-                        pstmt.setString(2, categoria);
-                        pstmt.setInt(3, quantidade);
+                    try (Connection conn = conectarBanco(); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                        pstmt.setString(1, param.get("nome"));
+                        pstmt.setString(2, param.get("categoria"));
+                        pstmt.setInt(3, qtd);
                         pstmt.setDouble(4, custo);
                         pstmt.setDouble(5, preco);
-                        
                         pstmt.executeUpdate();
-                        exchange.sendResponseHeaders(200, -1); // Sucesso Total
-                        
-                    } catch (SQLException e) {
-                        responderErro(exchange, 500, "Problema no Supabase: " + e.getMessage());
-                        return;
+                        exchange.sendResponseHeaders(200, -1);
+                    } catch (SQLException e) { responderErro(exchange, 500, e.getMessage()); return; }
+                } catch (Exception e) { responderErro(exchange, 500, e.getMessage()); }
+            } else { responderErro(exchange, 405, "Metodo nao permitido."); }
+            exchange.close();
+        }
+    }
+
+    static class EditarProdutoHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if ("POST".equals(exchange.getRequestMethod())) {
+                try {
+                    String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+                    Map<String, String> param = new HashMap<>();
+                    for (String p : body.split("&")) {
+                        String[] pair = p.split("=");
+                        if (pair.length > 1) param.put(pair[0], URLDecoder.decode(pair[1], StandardCharsets.UTF_8));
                     }
 
-                } catch (NumberFormatException e) {
-                    responderErro(exchange, 400, "O valor ou preço digitado possui formato inválido.");
-                } catch (Exception e) {
-                    responderErro(exchange, 500, "Erro interno de comunicação: " + e.getMessage());
-                }
-            } else {
-                responderErro(exchange, 405, "Método não permitido.");
-            }
+                    if (param.get("id") == null || param.get("nome") == null || param.get("categoria") == null || param.get("preco") == null) {
+                        responderErro(exchange, 400, "Dados incompletos."); return;
+                    }
+
+                    int id = Integer.parseInt(param.get("id"));
+                    double preco = Double.parseDouble(param.get("preco").replace(",", "."));
+
+                    String sql = "UPDATE produtos SET nome = ?, categoria = ?, preco_venda = ? WHERE id = ?";
+                    try (Connection conn = conectarBanco(); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                        pstmt.setString(1, param.get("nome"));
+                        pstmt.setString(2, param.get("categoria"));
+                        pstmt.setDouble(3, preco);
+                        pstmt.setInt(4, id);
+                        pstmt.executeUpdate();
+                        exchange.sendResponseHeaders(200, -1);
+                    } catch (SQLException e) { responderErro(exchange, 500, e.getMessage()); return; }
+                } catch (Exception e) { responderErro(exchange, 500, e.getMessage()); }
+            } else { responderErro(exchange, 405, "Metodo nao permitido."); }
             exchange.close();
         }
     }
