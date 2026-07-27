@@ -22,12 +22,9 @@ public class Main {
         String portEnv = System.getenv("PORT");
         int port = (portEnv != null && !portEnv.isEmpty()) ? Integer.parseInt(portEnv) : 8080;
         
-        // 0.0.0.0 garante que o roteador do Render consiga acessar
         HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
-
         server.createContext("/", new DashboardHandler());
-
-        server.setExecutor(null); 
+        server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool()); 
         
         System.out.println("=== ERP POINT DO FRANGO INICIADO NA PORTA " + port + " ===");
         server.start();
@@ -37,10 +34,9 @@ public class Main {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             
-            // BUG CORRIGIDO AQUI: O Render não vai mais travar (Erro 502)!
             if ("HEAD".equals(exchange.getRequestMethod())) {
                 exchange.sendResponseHeaders(200, -1);
-                exchange.close(); // <-- A linha mágica que faltava
+                exchange.close();
                 return;
             }
 
@@ -71,10 +67,11 @@ public class Main {
                         </tr>
                         """, id, nome, categoria, quantidade, preco, id, id));
                 }
-            } catch (SQLException e) {
+            } catch (Exception e) {
                 linhasTabela.append("<tr><td colspan='6' style='color:red;'>Erro no banco: ").append(e.getMessage()).append("</td></tr>");
             }
 
+            // O nosso HTML agora está protegido contra o bug da porcentagem!
             String htmlCompleto = """
                 <!DOCTYPE html>
                 <html lang="pt-BR">
@@ -112,10 +109,8 @@ public class Main {
                     </style>
                 </head>
                 <body>
-
                     <div class="sidebar">
                         <h2>🍗 Point do Frango</h2>
-                        
                         <div class="menu-category">Operação & Vendas</div>
                         <a href="#" class="menu-item">🛒 Caixa</a>
                         <a href="#" class="menu-item">🖨️ Pedidos Cozinha / Mesas</a>
@@ -136,7 +131,6 @@ public class Main {
                             👤 Acesso logado: <b>PROPRIETÁRIO</b>
                         </div>
                     </div>
-
                     <div class="main-content">
                         <div class="header">
                             <div>
@@ -145,7 +139,6 @@ public class Main {
                             </div>
                             <button class="btn btn-primary" onclick="alert('Logo abriremos a tela para cadastrar Porções, Combos e Bebidas!')">➕ Novo Produto</button>
                         </div>
-
                         <div class="card">
                             <table>
                                 <thead>
@@ -159,12 +152,11 @@ public class Main {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    %s
+                                    LINHAS_DA_TABELA_AQUI
                                 </tbody>
                             </table>
                         </div>
                     </div>
-
                     <script>
                         function editarProduto(id) {
                             alert("Módulo em construção: Aqui você poderá alterar o nome e o valor de venda do produto ID " + id);
@@ -178,7 +170,7 @@ public class Main {
                     </script>
                 </body>
                 </html>
-                """.formatted(linhasTabela.toString());
+                """.replace("LINHAS_DA_TABELA_AQUI", linhasTabela.toString());
 
             byte[] res = htmlCompleto.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
