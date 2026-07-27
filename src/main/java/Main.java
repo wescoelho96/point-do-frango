@@ -23,7 +23,7 @@ public class Main {
         int port = (portEnv != null && !portEnv.isEmpty()) ? Integer.parseInt(portEnv) : 8080;
         
         HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
-
+        
         server.createContext("/", new DashboardHandler()); 
         server.createContext("/repor", new ReporEstoqueHandler()); 
         
@@ -84,29 +84,24 @@ public class Main {
                     <style>
                         :root { --primary: #b91c1c; --sidebar: #1e293b; --bg: #f8fafc; --text: #334155; }
                         body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; height: 100vh; }
-                        
                         .sidebar { width: 260px; background: var(--sidebar); color: white; display: flex; flex-direction: column; }
                         .sidebar h2 { text-align: center; padding: 20px 0; margin: 0; background: #0f172a; font-size: 1.2rem; }
                         .menu-category { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; padding: 15px 20px 5px; font-weight: bold; letter-spacing: 0.5px;}
                         .menu-item { padding: 12px 20px; color: #cbd5e1; text-decoration: none; border-bottom: 1px solid #334155; transition: 0.2s; font-size: 0.95rem; }
                         .menu-item:hover, .menu-item.active { background: var(--primary); color: white; }
-                        
                         .main-content { flex: 1; padding: 30px; overflow-y: auto; }
                         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
                         .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-                        
                         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
                         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }
                         th { background: #f1f5f9; font-weight: 600; }
                         .badge { background: #e2e8f0; padding: 4px 8px; border-radius: 12px; font-size: 0.8rem; }
-                        
                         .btn { padding: 8px 16px; border: none; border-radius: 5px; cursor: pointer; color: white; font-weight: bold; transition: 0.2s; }
                         .btn-primary { background: var(--primary); }
                         .btn-primary:hover { background: #991b1b; }
                         .btn-blue { background: #3b82f6; }
                         .btn-green { background: #10b981; }
                         .btn-sm { padding: 6px 10px; font-size: 0.85rem; margin-right: 5px; }
-                        
                         .user-profile { margin-top: auto; padding: 15px; background: #0f172a; text-align: center; font-size: 0.85rem; color: #10b981; }
                     </style>
                 </head>
@@ -164,21 +159,21 @@ public class Main {
                             alert("Módulo em construção: Aqui você poderá alterar o nome e o valor de venda do produto ID " + id);
                         }
                         
-                        // NOVO SCRIPT PARA O BOTÃO REPOR
                         function reporEstoque(id) {
                             let qtd = prompt("Quantas unidades CHEGARAM do fornecedor para somar ao estoque atual?");
                             
-                            // Verifica se o dono digitou um numero valido maior que zero
                             if (qtd && !isNaN(qtd) && parseInt(qtd) > 0) {
-                                // Manda a requisição invisível para a rota /repor no Java
                                 fetch('/repor?id=' + id + '&qtd=' + parseInt(qtd), { method: 'POST' })
                                 .then(response => {
                                     if(response.ok) {
-                                        // Sucesso! Recarrega a página para atualizar o número na tela
-                                        window.location.reload();
+                                        alert("✅ Estoque atualizado com sucesso no banco de dados!");
+                                        window.location.href = '/';
                                     } else {
-                                        alert("Erro de comunicação com o servidor ao atualizar estoque.");
+                                        alert("❌ Erro ao salvar no banco. Código: " + response.status);
                                     }
+                                })
+                                .catch(error => {
+                                    alert("❌ Erro de conexão. Verifique sua internet.");
                                 });
                             } else if (qtd) {
                                 alert("Por favor, digite um número válido.");
@@ -190,7 +185,13 @@ public class Main {
                 """.replace("LINHAS_DA_TABELA_AQUI", linhasTabela.toString());
 
             byte[] res = htmlCompleto.getBytes(StandardCharsets.UTF_8);
+            
+            // BLINDAGEM CONTRA O CACHE DO NAVEGADOR
             exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
+            exchange.getResponseHeaders().set("Cache-Control", "no-cache, no-store, must-revalidate");
+            exchange.getResponseHeaders().set("Pragma", "no-cache");
+            exchange.getResponseHeaders().set("Expires", "0");
+            
             exchange.sendResponseHeaders(200, res.length);
             OutputStream os = exchange.getResponseBody();
             os.write(res); 
@@ -201,13 +202,11 @@ public class Main {
     static class ReporEstoqueHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            // Verifica se a requisição é do tipo POST (Ação segura do botão)
             if ("POST".equals(exchange.getRequestMethod())) {
                 
                 String query = exchange.getRequestURI().getQuery();
                 int id = -1;
                 int qtd = 0;
-
 
                 try {
                     if (query != null) {
@@ -227,27 +226,29 @@ public class Main {
                 if (id != -1 && qtd > 0) {
 
                     try (Connection conn = conectarBanco();
-                         PreparedStatement pstmt = conn.prepareStatement(
-                             "UPDATE produtos SET quantidade = quantidade + ? WHERE id = ?")) {
+                         Statement stmt = conn.createStatement()) {
                         
-                        pstmt.setInt(1, qtd);
-                        pstmt.setInt(2, id);
-                        pstmt.executeUpdate();
+                        String sql = "UPDATE produtos SET quantidade = quantidade + " + qtd + " WHERE id = " + id;
+                        int linhasAlteradas = stmt.executeUpdate(sql);
 
-
-                        exchange.sendResponseHeaders(200, -1);
+                        if (linhasAlteradas > 0) {
+                            exchange.sendResponseHeaders(200, -1);
+                        } else {
+                            exchange.sendResponseHeaders(404, -1);
+                        }
                         exchange.close();
                         
                     } catch (SQLException e) {
-                        exchange.sendResponseHeaders(500, -1); // Erro de banco
+                        System.out.println("ERRO DO BANCO: " + e.getMessage());
+                        exchange.sendResponseHeaders(500, -1);
                         exchange.close();
                     }
                 } else {
-                    exchange.sendResponseHeaders(400, -1); // Dados incorretos
+                    exchange.sendResponseHeaders(400, -1);
                     exchange.close();
                 }
             } else {
-                exchange.sendResponseHeaders(405, -1); // Metodo não permitido
+                exchange.sendResponseHeaders(405, -1);
                 exchange.close();
             }
         }
