@@ -4,11 +4,15 @@ import com.sun.net.httpserver.HttpExchange;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.sql.*;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 
 public class Main {
+
 
     private static Connection conectarBanco() throws SQLException {
         String dbUrl = System.getenv("DATABASE_URL");
@@ -24,8 +28,10 @@ public class Main {
         
         HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
         
+
         server.createContext("/", new DashboardHandler()); 
         server.createContext("/repor", new ReporEstoqueHandler()); 
+        server.createContext("/novo", new NovoProdutoHandler()); // NOVA ROTA: Cadastro
         
         server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool()); 
         
@@ -89,7 +95,7 @@ public class Main {
                         .menu-category { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; padding: 15px 20px 5px; font-weight: bold; letter-spacing: 0.5px;}
                         .menu-item { padding: 12px 20px; color: #cbd5e1; text-decoration: none; border-bottom: 1px solid #334155; transition: 0.2s; font-size: 0.95rem; }
                         .menu-item:hover, .menu-item.active { background: var(--primary); color: white; }
-                        .main-content { flex: 1; padding: 30px; overflow-y: auto; }
+                        .main-content { flex: 1; padding: 30px; overflow-y: auto; position: relative; }
                         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
                         .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
                         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
@@ -101,8 +107,18 @@ public class Main {
                         .btn-primary:hover { background: #991b1b; }
                         .btn-blue { background: #3b82f6; }
                         .btn-green { background: #10b981; }
+                        .btn-gray { background: #64748b; }
                         .btn-sm { padding: 6px 10px; font-size: 0.85rem; margin-right: 5px; }
                         .user-profile { margin-top: auto; padding: 15px; background: #0f172a; text-align: center; font-size: 0.85rem; color: #10b981; }
+                        
+                        /* CSS DO MODAL */
+                        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+                        .modal-box { background: white; padding: 25px; border-radius: 8px; width: 400px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+                        .modal-box h3 { margin-top: 0; margin-bottom: 20px; color: var(--text); }
+                        .form-group { margin-bottom: 15px; }
+                        .form-group label { display: block; margin-bottom: 5px; font-size: 0.9rem; font-weight: bold; }
+                        .form-group input, .form-group select { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; }
+                        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
                     </style>
                 </head>
                 <body>
@@ -134,7 +150,8 @@ public class Main {
                                 <h2 style="margin: 0;">Gestão de Estoque e Cardápio</h2>
                                 <p style="color: #64748b; margin-top: 5px;">Módulo 1 - Estrutura Base</p>
                             </div>
-                            <button class="btn btn-primary" onclick="alert('Logo abriremos a tela para cadastrar Porções, Combos e Bebidas!')">➕ Novo Produto</button>
+                            <!-- Botão agora abre o Modal -->
+                            <button class="btn btn-primary" onclick="abrirModal()">➕ Novo Produto</button>
                         </div>
                         <div class="card">
                             <table>
@@ -154,30 +171,92 @@ public class Main {
                             </table>
                         </div>
                     </div>
+
+                    <!-- ESTRUTURA DO MODAL (Fica escondido até clicar no botão) -->
+                    <div class="modal-overlay" id="modalNovoProduto">
+                        <div class="modal-box">
+                            <h3>Cadastrar Novo Produto</h3>
+                            <div class="form-group">
+                                <label>Nome do Produto</label>
+                                <input type="text" id="novoNome" placeholder="Ex: Porção de Mandioca">
+                            </div>
+                            <div class="form-group">
+                                <label>Categoria</label>
+                                <select id="novaCategoria">
+                                    <option value="Porção">Porção</option>
+                                    <option value="Frango">Frango</option>
+                                    <option value="Bebida">Bebida</option>
+                                    <option value="Combo">Combo</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Quantidade em Estoque (Unidades)</label>
+                                <input type="number" id="novaQtd" placeholder="Ex: 10">
+                            </div>
+                            <div class="form-group">
+                                <label>Preço de Venda (R$)</label>
+                                <input type="number" id="novoPreco" step="0.01" placeholder="Ex: 25.50">
+                            </div>
+                            <div class="modal-actions">
+                                <button class="btn btn-gray" onclick="fecharModal()">Cancelar</button>
+                                <button class="btn btn-primary" onclick="salvarNovoProduto()">Salvar Produto</button>
+                            </div>
+                        </div>
+                    </div>
+
                     <script>
+                        // Lógica de Interface
+                        function abrirModal() { document.getElementById('modalNovoProduto').style.display = 'flex'; }
+                        function fecharModal() { document.getElementById('modalNovoProduto').style.display = 'none'; }
+
                         function editarProduto(id) {
                             alert("Módulo em construção: Aqui você poderá alterar o nome e o valor de venda do produto ID " + id);
                         }
                         
                         function reporEstoque(id) {
                             let qtd = prompt("Quantas unidades CHEGARAM do fornecedor para somar ao estoque atual?");
-                            
                             if (qtd && !isNaN(qtd) && parseInt(qtd) > 0) {
                                 fetch('/repor?id=' + id + '&qtd=' + parseInt(qtd), { method: 'POST' })
                                 .then(response => {
-                                    if(response.ok) {
-                                        alert("✅ Estoque atualizado com sucesso no banco de dados!");
-                                        window.location.href = '/';
-                                    } else {
-                                        alert("❌ Erro ao salvar no banco. Código: " + response.status);
-                                    }
-                                })
-                                .catch(error => {
-                                    alert("❌ Erro de conexão. Verifique sua internet.");
+                                    if(response.ok) { window.location.reload(); } 
+                                    else { alert("❌ Erro ao salvar no banco."); }
                                 });
-                            } else if (qtd) {
-                                alert("Por favor, digite um número válido.");
                             }
+                        }
+
+                        // NOVA FUNÇÃO AJAX: Envia os dados do formulário para o Java
+                        function salvarNovoProduto() {
+                            let nome = document.getElementById('novoNome').value;
+                            let categoria = document.getElementById('novaCategoria').value;
+                            let qtd = document.getElementById('novaQtd').value;
+                            let preco = document.getElementById('novoPreco').value;
+
+                            if(!nome || !qtd || !preco) {
+                                alert("Preencha todos os campos!");
+                                return;
+                            }
+
+                            // Empacota os dados para envio (formato padrão da web)
+                            let dadosFormulario = new URLSearchParams({
+                                'nome': nome,
+                                'categoria': categoria,
+                                'quantidade': qtd,
+                                'preco': preco
+                            });
+
+                            fetch('/novo', { 
+                                method: 'POST', 
+                                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                                body: dadosFormulario
+                            })
+                            .then(response => {
+                                if(response.ok) {
+                                    alert("✅ Produto cadastrado com sucesso!");
+                                    window.location.reload();
+                                } else {
+                                    alert("❌ Erro ao cadastrar. Tente novamente.");
+                                }
+                            });
                         }
                     </script>
                 </body>
@@ -185,13 +264,8 @@ public class Main {
                 """.replace("LINHAS_DA_TABELA_AQUI", linhasTabela.toString());
 
             byte[] res = htmlCompleto.getBytes(StandardCharsets.UTF_8);
-            
-            // BLINDAGEM CONTRA O CACHE DO NAVEGADOR
             exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
             exchange.getResponseHeaders().set("Cache-Control", "no-cache, no-store, must-revalidate");
-            exchange.getResponseHeaders().set("Pragma", "no-cache");
-            exchange.getResponseHeaders().set("Expires", "0");
-            
             exchange.sendResponseHeaders(200, res.length);
             OutputStream os = exchange.getResponseBody();
             os.write(res); 
@@ -199,19 +273,16 @@ public class Main {
         }
     }
 
+
     static class ReporEstoqueHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if ("POST".equals(exchange.getRequestMethod())) {
-                
                 String query = exchange.getRequestURI().getQuery();
-                int id = -1;
-                int qtd = 0;
-
+                int id = -1; int qtd = 0;
                 try {
                     if (query != null) {
-                        String[] pares = query.split("&");
-                        for (String par : pares) {
+                        for (String par : query.split("&")) {
                             String[] valores = par.split("=");
                             if (valores.length == 2) {
                                 if (valores[0].equals("id")) id = Integer.parseInt(valores[1]);
@@ -219,38 +290,80 @@ public class Main {
                             }
                         }
                     }
-                } catch (Exception e) {
-                    System.out.println("Erro ao ler parametros: " + e.getMessage());
-                }
+                } catch (Exception e) {}
 
                 if (id != -1 && qtd > 0) {
-
-                    try (Connection conn = conectarBanco();
-                         Statement stmt = conn.createStatement()) {
-                        
+                    try (Connection conn = conectarBanco(); Statement stmt = conn.createStatement()) {
                         String sql = "UPDATE produtos SET quantidade = quantidade + " + qtd + " WHERE id = " + id;
                         int linhasAlteradas = stmt.executeUpdate(sql);
-
-                        if (linhasAlteradas > 0) {
-                            exchange.sendResponseHeaders(200, -1);
-                        } else {
-                            exchange.sendResponseHeaders(404, -1);
-                        }
+                        if (linhasAlteradas > 0) exchange.sendResponseHeaders(200, -1);
+                        else exchange.sendResponseHeaders(404, -1);
                         exchange.close();
-                        
                     } catch (SQLException e) {
-                        System.out.println("ERRO DO BANCO: " + e.getMessage());
-                        exchange.sendResponseHeaders(500, -1);
-                        exchange.close();
+                        exchange.sendResponseHeaders(500, -1); exchange.close();
+                    }
+                } else { exchange.sendResponseHeaders(400, -1); exchange.close(); }
+            } else { exchange.sendResponseHeaders(405, -1); exchange.close(); }
+        }
+    }
+
+
+    static class NovoProdutoHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if ("POST".equals(exchange.getRequestMethod())) {
+                
+
+                String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+                Map<String, String> parametros = new HashMap<>();
+                
+                for (String param : body.split("&")) {
+                    String[] pair = param.split("=");
+                    if (pair.length > 1) {
+
+                        parametros.put(pair[0], URLDecoder.decode(pair[1], StandardCharsets.UTF_8));
+                    }
+                }
+
+                String nome = parametros.get("nome");
+                String categoria = parametros.get("categoria");
+                String quantidadeStr = parametros.get("quantidade");
+                String precoStr = parametros.get("preco");
+
+                if (nome != null && categoria != null && quantidadeStr != null && precoStr != null) {
+                    try {
+                        int quantidade = Integer.parseInt(quantidadeStr);
+                        double preco = Double.parseDouble(precoStr);
+
+
+                        String sql = "INSERT INTO produtos (nome, categoria, quantidade, preco_venda) VALUES (?, ?, ?, ?)";
+                        
+                        try (Connection conn = conectarBanco();
+                             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                            
+                            pstmt.setString(1, nome);
+                            pstmt.setString(2, categoria);
+                            pstmt.setInt(3, quantidade);
+                            pstmt.setDouble(4, preco);
+                            
+                            pstmt.executeUpdate();
+                            
+                            exchange.sendResponseHeaders(200, -1); // Sucesso!
+                            
+                        } catch (SQLException e) {
+                            System.out.println("ERRO SQL: " + e.getMessage());
+                            exchange.sendResponseHeaders(500, -1);
+                        }
+                    } catch (NumberFormatException e) {
+                        exchange.sendResponseHeaders(400, -1); // Erro de digitação
                     }
                 } else {
-                    exchange.sendResponseHeaders(400, -1);
-                    exchange.close();
+                    exchange.sendResponseHeaders(400, -1); // Faltou dados
                 }
             } else {
-                exchange.sendResponseHeaders(405, -1);
-                exchange.close();
+                exchange.sendResponseHeaders(405, -1); // Método não permitido
             }
+            exchange.close();
         }
     }
 }
