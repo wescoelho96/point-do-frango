@@ -18,6 +18,9 @@ public class Main {
         if (dbUrl == null || dbUrl.isEmpty()) {
             throw new SQLException("Variavel de ambiente DATABASE_URL nao encontrada.");
         }
+        if (!dbUrl.contains("prepareThreshold")) {
+            dbUrl += (dbUrl.contains("?") ? "&" : "?") + "prepareThreshold=0";
+        }
         return DriverManager.getConnection(dbUrl);
     }
 
@@ -458,7 +461,6 @@ public class Main {
                             });
                         }
                         
-                        // Inicializa o carrinho vazio na tela
                         renderizarCarrinho();
                     </script>
                 </body>
