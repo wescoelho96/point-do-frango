@@ -39,6 +39,7 @@ public class Main {
         server.createContext("/repor", new ReporEstoqueHandler()); 
         server.createContext("/novo", new NovoProdutoHandler()); 
         server.createContext("/editar", new EditarProdutoHandler()); 
+        server.createContext("/finalizar", new FinalizarVendaHandler()); 
         
         server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool()); 
         server.start();
@@ -89,8 +90,9 @@ public class Main {
                             <div class="produto-categoria">%s</div>
                             <h4>%s</h4>
                             <p>R$ %.2f</p>
+                            <small>%d em estoque</small>
                         </div>
-                        """, id, nomeSeguroJs, preco, categoria, nome, preco));
+                        """, id, nomeSeguroJs, preco, categoria, nome, preco, quantidade));
                 }
             } catch (Exception e) {
                 linhasTabela.append("<tr><td colspan='6' style='color:red;'>Erro: ").append(e.getMessage()).append("</td></tr>");
@@ -144,10 +146,11 @@ public class Main {
                         .pdv-container { display: flex; gap: 20px; height: calc(100vh - 120px); }
                         .pdv-produtos { flex: 2; overflow-y: auto; padding-right: 10px; }
                         .grid-produtos { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; }
-                        .produto-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; cursor: pointer; transition: 0.2s; text-align: center; }
+                        .produto-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; cursor: pointer; transition: 0.2s; text-align: center; position: relative; }
                         .produto-card:hover { border-color: var(--primary); transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
                         .produto-card h4 { margin: 10px 0 5px 0; font-size: 1rem; color: var(--text); }
                         .produto-card p { margin: 0; font-weight: bold; color: #10b981; }
+                        .produto-card small { display: block; font-size: 0.75rem; color: #64748b; margin-top: 5px; }
                         .produto-categoria { font-size: 0.7rem; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px; }
                         
                         .pdv-comanda { flex: 1; background: white; border-radius: 8px; display: flex; flex-direction: column; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
@@ -188,8 +191,6 @@ public class Main {
                     </div>
                     
                     <div class="main-content">
-                        
-                        <!-- MÓDULO 2: PDV / CAIXA -->
                         <div id="modulo-caixa" class="modulo active">
                             <div class="header">
                                 <div>
@@ -208,21 +209,18 @@ public class Main {
                                     <div class="comanda-header">
                                         <h3>Comanda Atual</h3>
                                     </div>
-                                    <div class="comanda-itens" id="carrinho-itens">
-                                        <p style="text-align:center; color:#94a3b8; margin-top: 50px;">A comanda está vazia.<br>Clique nos produtos para adicionar.</p>
-                                    </div>
+                                    <div class="comanda-itens" id="carrinho-itens"></div>
                                     <div class="comanda-footer">
                                         <div class="total-row">
                                             <span>Total:</span>
                                             <span id="carrinho-total">R$ 0.00</span>
                                         </div>
-                                        <button class="btn btn-primary btn-block" onclick="alert('Em breve finalizaremos a venda no banco!')">Finalizar Pedido</button>
+                                        <button class="btn btn-primary btn-block" onclick="finalizarPedido()">Finalizar Pedido</button>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- MÓDULO 1: ESTOQUE (Oculto inicialmente) -->
                         <div id="modulo-estoque" class="modulo">
                             <div class="header">
                                 <div>
@@ -249,7 +247,6 @@ public class Main {
                                 </table>
                             </div>
                         </div>
-
                     </div>
 
                     <div class="modal-overlay" id="modalNovoProduto">
@@ -371,6 +368,37 @@ public class Main {
                             divTotal.innerText = 'R$ ' + total.toFixed(2);
                         }
 
+                        function finalizarPedido() {
+                            if (carrinho.length === 0) {
+                                alert("Adicione produtos antes de finalizar!");
+                                return;
+                            }
+                            
+                            let btn = document.querySelector('.comanda-footer .btn-primary');
+                            btn.innerText = "Processando...";
+                            btn.disabled = true;
+
+                            let total = carrinho.reduce((sum, item) => sum + (item.preco * item.quantidade), 0);
+                            let itensStr = carrinho.map(i => i.id + '_' + i.quantidade + '_' + i.preco).join(',');
+                            
+                            let dados = new URLSearchParams({
+                                'itens': itensStr,
+                                'total': total.toFixed(2)
+                            });
+
+                            fetch('/finalizar', { method: 'POST', body: dados.toString() })
+                            .then(async response => {
+                                if(response.ok) {
+                                    alert("✅ Pedido finalizado com sucesso!");
+                                    window.location.reload();
+                                } else {
+                                    alert("❌ Erro ao finalizar: " + await response.text());
+                                    btn.innerText = "Finalizar Pedido";
+                                    btn.disabled = false;
+                                }
+                            });
+                        }
+
                         function abrirModal() { document.getElementById('modalNovoProduto').style.display = 'flex'; }
                         function fecharModal() { document.getElementById('modalNovoProduto').style.display = 'none'; }
                         function fecharModalEditar() { document.getElementById('modalEditarProduto').style.display = 'none'; }
@@ -429,6 +457,9 @@ public class Main {
                                 else alert(await response.text());
                             });
                         }
+                        
+                        // Inicializa o carrinho vazio na tela
+                        renderizarCarrinho();
                     </script>
                 </body>
                 </html>
@@ -538,6 +569,81 @@ public class Main {
                         pstmt.setInt(4, id);
                         pstmt.executeUpdate();
                         exchange.sendResponseHeaders(200, -1);
+                    } catch (SQLException e) { responderErro(exchange, 500, e.getMessage()); return; }
+                } catch (Exception e) { responderErro(exchange, 500, e.getMessage()); }
+            } else { responderErro(exchange, 405, "Metodo nao permitido."); }
+            exchange.close();
+        }
+    }
+
+    static class FinalizarVendaHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if ("POST".equals(exchange.getRequestMethod())) {
+                try {
+                    String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+                    Map<String, String> param = new HashMap<>();
+                    for (String p : body.split("&")) {
+                        String[] pair = p.split("=");
+                        if (pair.length > 1) param.put(pair[0], URLDecoder.decode(pair[1], StandardCharsets.UTF_8));
+                    }
+
+                    if (param.get("itens") == null || param.get("total") == null) {
+                        responderErro(exchange, 400, "Carrinho vazio."); return;
+                    }
+
+                    double total = Double.parseDouble(param.get("total").replace(",", "."));
+                    String[] itens = param.get("itens").split(",");
+
+                    try (Connection conn = conectarBanco()) {
+                        conn.setAutoCommit(false); 
+                        
+                        try {
+                            String sqlVenda = "INSERT INTO vendas (valor_total) VALUES (?)";
+                            long vendaId;
+                            try (PreparedStatement pstmtVenda = conn.prepareStatement(sqlVenda, Statement.RETURN_GENERATED_KEYS)) {
+                                pstmtVenda.setDouble(1, total);
+                                pstmtVenda.executeUpdate();
+                                try (ResultSet rs = pstmtVenda.getGeneratedKeys()) {
+                                    if (rs.next()) vendaId = rs.getLong(1);
+                                    else throw new SQLException("Falha ao gerar ID.");
+                                }
+                            }
+
+                            String sqlItem = "INSERT INTO itens_venda (venda_id, produto_id, quantidade, preco_unitario) VALUES (?, ?, ?, ?)";
+                            String sqlEstoque = "UPDATE produtos SET quantidade = quantidade - ? WHERE id = ?";
+                            
+                            try (PreparedStatement pstmtItem = conn.prepareStatement(sqlItem);
+                                 PreparedStatement pstmtEstoque = conn.prepareStatement(sqlEstoque)) {
+                                
+                                for (String item : itens) {
+                                    String[] partes = item.split("_");
+                                    long prodId = Long.parseLong(partes[0]);
+                                    int qtd = Integer.parseInt(partes[1]);
+                                    double preco = Double.parseDouble(partes[2]);
+
+                                    pstmtItem.setLong(1, vendaId);
+                                    pstmtItem.setLong(2, prodId);
+                                    pstmtItem.setInt(3, qtd);
+                                    pstmtItem.setDouble(4, preco);
+                                    pstmtItem.addBatch();
+
+                                    pstmtEstoque.setInt(1, qtd);
+                                    pstmtEstoque.setLong(2, prodId);
+                                    pstmtEstoque.addBatch();
+                                }
+                                
+                                pstmtItem.executeBatch();
+                                pstmtEstoque.executeBatch();
+                            }
+                            
+                            conn.commit();
+                            exchange.sendResponseHeaders(200, -1);
+                            
+                        } catch (SQLException e) {
+                            conn.rollback();
+                            throw e;
+                        }
                     } catch (SQLException e) { responderErro(exchange, 500, e.getMessage()); return; }
                 } catch (Exception e) { responderErro(exchange, 500, e.getMessage()); }
             } else { responderErro(exchange, 405, "Metodo nao permitido."); }
