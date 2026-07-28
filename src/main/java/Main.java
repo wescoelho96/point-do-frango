@@ -59,44 +59,73 @@ public class Main {
 
             StringBuilder linhasTabela = new StringBuilder();
             StringBuilder gridProdutos = new StringBuilder();
+            StringBuilder linhasVendas = new StringBuilder();
+            
+            double faturamento = 0.0;
+            double custoTotal = 0.0;
+            double lucro = 0.0;
 
             try (Connection conn = conectarBanco();
-                 Statement stmt = conn.createStatement();
-                 ResultSet rs = stmt.executeQuery("SELECT * FROM produtos ORDER BY categoria, id")) {
+                 Statement stmt = conn.createStatement()) {
                 
-                while (rs.next()) {
-                    int id = rs.getInt("id");
-                    String nome = rs.getString("nome");
-                    String categoria = rs.getString("categoria");
-                    int quantidade = rs.getInt("quantidade");
-                    double preco = rs.getDouble("preco_venda");
+                try (ResultSet rs = stmt.executeQuery("SELECT * FROM produtos ORDER BY categoria, id")) {
+                    while (rs.next()) {
+                        int id = rs.getInt("id");
+                        String nome = rs.getString("nome");
+                        String categoria = rs.getString("categoria");
+                        int quantidade = rs.getInt("quantidade");
+                        double preco = rs.getDouble("preco_venda");
 
-                    String nomeSeguroHtml = nome.replace("\"", "&quot;");
-                    String nomeSeguroJs = nome.replace("'", "\\'");
+                        String nomeSeguroHtml = nome.replace("\"", "&quot;");
+                        String nomeSeguroJs = nome.replace("'", "\\'");
 
-                    linhasTabela.append(String.format(Locale.US, """
-                        <tr>
-                            <td>%d</td>
-                            <td><strong>%s</strong></td>
-                            <td><span class="badge">%s</span></td>
-                            <td>%d un</td>
-                            <td>R$ %.2f</td>
-                            <td>
-                                <button class="btn btn-sm btn-blue" data-id="%d" data-nome="%s" data-categoria="%s" data-preco="%.2f" onclick="abrirModalEditar(this)">✏️ Editar</button>
-                                <button class="btn btn-sm btn-green" onclick="reporEstoque(%d)">📦 Repor</button>
-                            </td>
-                        </tr>
-                        """, id, nome, categoria, quantidade, preco, id, nomeSeguroHtml, categoria, preco, id));
+                        linhasTabela.append(String.format(Locale.US, """
+                            <tr>
+                                <td>%d</td>
+                                <td><strong>%s</strong></td>
+                                <td><span class="badge">%s</span></td>
+                                <td>%d un</td>
+                                <td>R$ %.2f</td>
+                                <td>
+                                    <button class="btn btn-sm btn-blue" data-id="%d" data-nome="%s" data-categoria="%s" data-preco="%.2f" onclick="abrirModalEditar(this)">✏️ Editar</button>
+                                    <button class="btn btn-sm btn-green" onclick="reporEstoque(%d)">📦 Repor</button>
+                                </td>
+                            </tr>
+                            """, id, nome, categoria, quantidade, preco, id, nomeSeguroHtml, categoria, preco, id));
 
-                    gridProdutos.append(String.format(Locale.US, """
-                        <div class="produto-card" onclick="adicionarAoCarrinho(%d, '%s', %.2f)">
-                            <div class="produto-categoria">%s</div>
-                            <h4>%s</h4>
-                            <p>R$ %.2f</p>
-                            <small>%d em estoque</small>
-                        </div>
-                        """, id, nomeSeguroJs, preco, categoria, nome, preco, quantidade));
+                        gridProdutos.append(String.format(Locale.US, """
+                            <div class="produto-card" onclick="adicionarAoCarrinho(%d, '%s', %.2f)">
+                                <div class="produto-categoria">%s</div>
+                                <h4>%s</h4>
+                                <p>R$ %.2f</p>
+                                <small>%d em estoque</small>
+                            </div>
+                            """, id, nomeSeguroJs, preco, categoria, nome, preco, quantidade));
+                    }
                 }
+
+                try (ResultSet rsFat = stmt.executeQuery("SELECT COALESCE(SUM(valor_total), 0) FROM vendas")) {
+                    if (rsFat.next()) faturamento = rsFat.getDouble(1);
+                }
+
+                try (ResultSet rsCusto = stmt.executeQuery("SELECT COALESCE(SUM(iv.quantidade * p.preco_custo), 0) FROM itens_venda iv JOIN produtos p ON iv.produto_id = p.id")) {
+                    if (rsCusto.next()) custoTotal = rsCusto.getDouble(1);
+                }
+
+                lucro = faturamento - custoTotal;
+
+                try (ResultSet rsVendas = stmt.executeQuery("SELECT id, valor_total, TO_CHAR(data_venda, 'DD/MM/YYYY HH24:MI') FROM vendas ORDER BY id DESC LIMIT 10")) {
+                    while (rsVendas.next()) {
+                        linhasVendas.append(String.format(Locale.US, """
+                            <tr>
+                                <td>#%d</td>
+                                <td>%s</td>
+                                <td><strong>R$ %.2f</strong></td>
+                            </tr>
+                            """, rsVendas.getInt(1), rsVendas.getString(3), rsVendas.getDouble(2)));
+                    }
+                }
+
             } catch (Exception e) {
                 linhasTabela.append("<tr><td colspan='6' style='color:red;'>Erro: ").append(e.getMessage()).append("</td></tr>");
             }
@@ -167,6 +196,15 @@ public class Main {
                         .item-preco { font-weight: bold; }
                         .comanda-footer { padding: 20px; border-top: 1px solid #e2e8f0; background: #f8fafc; border-radius: 0 0 8px 8px; }
                         .total-row { display: flex; justify-content: space-between; font-size: 1.5rem; font-weight: bold; color: var(--text); }
+
+                        .dash-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 30px; }
+                        .dash-card { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 5px solid var(--primary); }
+                        .dash-card h3 { margin: 0 0 10px 0; color: #64748b; font-size: 0.9rem; text-transform: uppercase; }
+                        .dash-card h2 { margin: 0; font-size: 2rem; color: var(--text); }
+                        .dash-card.green { border-left-color: #10b981; }
+                        .dash-card.green h2 { color: #10b981; }
+                        .dash-card.red { border-left-color: #ef4444; }
+                        .dash-card.red h2 { color: #ef4444; }
                     </style>
                 </head>
                 <body>
@@ -180,7 +218,7 @@ public class Main {
                         <a onclick="navegar('modulo-estoque', this)" class="menu-item">📦 Controle de Estoque</a>
                         
                         <div class="menu-category">Financeiro & Despesas</div>
-                        <a class="menu-item">📊 Dashboard de Lucro</a>
+                        <a onclick="navegar('modulo-financeiro', this)" class="menu-item">📊 Dashboard de Lucro</a>
                         <a class="menu-item">💸 Acerto Motoboy / Taxas</a>
                         <a class="menu-item">🤝 Diária Freelancers</a>
                         
@@ -194,6 +232,7 @@ public class Main {
                     </div>
                     
                     <div class="main-content">
+                        
                         <div id="modulo-caixa" class="modulo active">
                             <div class="header">
                                 <div>
@@ -201,7 +240,6 @@ public class Main {
                                     <p style="color: #64748b; margin-top: 5px;">Módulo 2 - Vendas Dinâmicas</p>
                                 </div>
                             </div>
-                            
                             <div class="pdv-container">
                                 <div class="pdv-produtos">
                                     <div class="grid-produtos">
@@ -250,6 +288,47 @@ public class Main {
                                 </table>
                             </div>
                         </div>
+
+                        <div id="modulo-financeiro" class="modulo">
+                            <div class="header">
+                                <div>
+                                    <h2 style="margin: 0;">Dashboard de Lucro Real</h2>
+                                    <p style="color: #64748b; margin-top: 5px;">Módulo 3 - Inteligência Financeira</p>
+                                </div>
+                            </div>
+                            
+                            <div class="dash-cards">
+                                <div class="dash-card">
+                                    <h3>Faturamento Bruto</h3>
+                                    <h2>R$ FATURAMENTO_TOTAL</h2>
+                                </div>
+                                <div class="dash-card red">
+                                    <h3>Custo de Produção (CMV)</h3>
+                                    <h2>R$ CUSTO_TOTAL</h2>
+                                </div>
+                                <div class="dash-card green">
+                                    <h3>Lucro Líquido Real</h3>
+                                    <h2>R$ LUCRO_TOTAL</h2>
+                                </div>
+                            </div>
+
+                            <div class="card">
+                                <h3 style="margin-top: 0;">Últimos Pedidos Finalizados</h3>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Nº do Pedido</th>
+                                            <th>Data e Hora</th>
+                                            <th>Valor da Venda</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        LINHAS_VENDAS_AQUI
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
                     </div>
 
                     <div class="modal-overlay" id="modalNovoProduto">
@@ -466,7 +545,11 @@ public class Main {
                 </body>
                 </html>
                 """.replace("LINHAS_DA_TABELA_AQUI", linhasTabela.toString())
-                   .replace("GRID_DE_PRODUTOS_AQUI", gridProdutos.toString());
+                   .replace("GRID_DE_PRODUTOS_AQUI", gridProdutos.toString())
+                   .replace("FATURAMENTO_TOTAL", String.format(Locale.US, "%.2f", faturamento))
+                   .replace("CUSTO_TOTAL", String.format(Locale.US, "%.2f", custoTotal))
+                   .replace("LUCRO_TOTAL", String.format(Locale.US, "%.2f", lucro))
+                   .replace("LINHAS_VENDAS_AQUI", linhasVendas.toString());
 
             byte[] res = htmlCompleto.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
