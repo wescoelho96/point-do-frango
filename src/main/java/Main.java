@@ -54,10 +54,11 @@ public class Main {
             }
 
             StringBuilder linhasTabela = new StringBuilder();
+            StringBuilder gridProdutos = new StringBuilder();
 
             try (Connection conn = conectarBanco();
                  Statement stmt = conn.createStatement();
-                 ResultSet rs = stmt.executeQuery("SELECT * FROM produtos ORDER BY id")) {
+                 ResultSet rs = stmt.executeQuery("SELECT * FROM produtos ORDER BY categoria, id")) {
                 
                 while (rs.next()) {
                     int id = rs.getInt("id");
@@ -65,6 +66,9 @@ public class Main {
                     String categoria = rs.getString("categoria");
                     int quantidade = rs.getInt("quantidade");
                     double preco = rs.getDouble("preco_venda");
+
+                    String nomeSeguroHtml = nome.replace("\"", "&quot;");
+                    String nomeSeguroJs = nome.replace("'", "\\'");
 
                     linhasTabela.append(String.format(Locale.US, """
                         <tr>
@@ -74,16 +78,19 @@ public class Main {
                             <td>%d un</td>
                             <td>R$ %.2f</td>
                             <td>
-                                <button class="btn btn-sm btn-blue" 
-                                        data-id="%d" 
-                                        data-nome="%s" 
-                                        data-categoria="%s" 
-                                        data-preco="%.2f" 
-                                        onclick="abrirModalEditar(this)">✏️ Editar</button>
+                                <button class="btn btn-sm btn-blue" data-id="%d" data-nome="%s" data-categoria="%s" data-preco="%.2f" onclick="abrirModalEditar(this)">✏️ Editar</button>
                                 <button class="btn btn-sm btn-green" onclick="reporEstoque(%d)">📦 Repor</button>
                             </td>
                         </tr>
-                        """, id, nome, categoria, quantidade, preco, id, nome.replace("\"", "&quot;"), categoria, preco, id));
+                        """, id, nome, categoria, quantidade, preco, id, nomeSeguroHtml, categoria, preco, id));
+
+                    gridProdutos.append(String.format(Locale.US, """
+                        <div class="produto-card" onclick="adicionarAoCarrinho(%d, '%s', %.2f)">
+                            <div class="produto-categoria">%s</div>
+                            <h4>%s</h4>
+                            <p>R$ %.2f</p>
+                        </div>
+                        """, id, nomeSeguroJs, preco, categoria, nome, preco));
                 }
             } catch (Exception e) {
                 linhasTabela.append("<tr><td colspan='6' style='color:red;'>Erro: ").append(e.getMessage()).append("</td></tr>");
@@ -98,25 +105,31 @@ public class Main {
                     <title>Point do Frango - ERP</title>
                     <style>
                         :root { --primary: #b91c1c; --sidebar: #1e293b; --bg: #f8fafc; --text: #334155; }
-                        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; height: 100vh; }
+                        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; height: 100vh; overflow: hidden; }
                         .sidebar { width: 260px; background: var(--sidebar); color: white; display: flex; flex-direction: column; }
                         .sidebar h2 { text-align: center; padding: 20px 0; margin: 0; background: #0f172a; font-size: 1.2rem; }
                         .menu-category { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; padding: 15px 20px 5px; font-weight: bold; letter-spacing: 0.5px;}
-                        .menu-item { padding: 12px 20px; color: #cbd5e1; text-decoration: none; border-bottom: 1px solid #334155; transition: 0.2s; font-size: 0.95rem; }
+                        .menu-item { padding: 12px 20px; color: #cbd5e1; text-decoration: none; border-bottom: 1px solid #334155; transition: 0.2s; font-size: 0.95rem; cursor: pointer; }
                         .menu-item:hover, .menu-item.active { background: var(--primary); color: white; }
-                        .main-content { flex: 1; padding: 30px; overflow-y: auto; position: relative; }
+                        
+                        .main-content { flex: 1; overflow-y: auto; position: relative; }
+                        .modulo { display: none; padding: 30px; }
+                        .modulo.active { display: block; }
+                        
                         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
                         .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
                         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
                         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }
                         th { background: #f1f5f9; font-weight: 600; }
                         .badge { background: #e2e8f0; padding: 4px 8px; border-radius: 12px; font-size: 0.8rem; }
+                        
                         .btn { padding: 8px 16px; border: none; border-radius: 5px; cursor: pointer; color: white; font-weight: bold; transition: 0.2s; }
                         .btn-primary { background: var(--primary); }
                         .btn-primary:hover { background: #991b1b; }
                         .btn-blue { background: #3b82f6; }
                         .btn-green { background: #10b981; }
                         .btn-gray { background: #64748b; }
+                        .btn-block { width: 100%; padding: 15px; font-size: 1.1rem; margin-top: 20px; }
                         .btn-sm { padding: 6px 10px; font-size: 0.85rem; margin-right: 5px; }
                         .user-profile { margin-top: auto; padding: 15px; background: #0f172a; text-align: center; font-size: 0.85rem; color: #10b981; }
                         
@@ -127,56 +140,116 @@ public class Main {
                         .form-group label { display: block; margin-bottom: 5px; font-size: 0.9rem; font-weight: bold; }
                         .form-group input, .form-group select { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; }
                         .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+                        
+                        .pdv-container { display: flex; gap: 20px; height: calc(100vh - 120px); }
+                        .pdv-produtos { flex: 2; overflow-y: auto; padding-right: 10px; }
+                        .grid-produtos { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; }
+                        .produto-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; cursor: pointer; transition: 0.2s; text-align: center; }
+                        .produto-card:hover { border-color: var(--primary); transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+                        .produto-card h4 { margin: 10px 0 5px 0; font-size: 1rem; color: var(--text); }
+                        .produto-card p { margin: 0; font-weight: bold; color: #10b981; }
+                        .produto-categoria { font-size: 0.7rem; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px; }
+                        
+                        .pdv-comanda { flex: 1; background: white; border-radius: 8px; display: flex; flex-direction: column; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+                        .comanda-header { padding: 20px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; border-radius: 8px 8px 0 0; }
+                        .comanda-header h3 { margin: 0; }
+                        .comanda-itens { flex: 1; padding: 20px; overflow-y: auto; }
+                        .comanda-item { display: flex; justify-content: space-between; margin-bottom: 15px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 10px; }
+                        .item-info h5 { margin: 0 0 5px 0; font-size: 0.95rem; }
+                        .item-info small { color: #64748b; cursor: pointer; }
+                        .item-info small:hover { color: var(--primary); text-decoration: underline; }
+                        .item-preco { font-weight: bold; }
+                        .comanda-footer { padding: 20px; border-top: 1px solid #e2e8f0; background: #f8fafc; border-radius: 0 0 8px 8px; }
+                        .total-row { display: flex; justify-content: space-between; font-size: 1.5rem; font-weight: bold; color: var(--text); }
                     </style>
                 </head>
                 <body>
                     <div class="sidebar">
                         <h2>🍗 Point do Frango</h2>
                         <div class="menu-category">Operação & Vendas</div>
-                        <a href="#" class="menu-item">🛒 Caixa</a>
-                        <a href="#" class="menu-item">🖨️ Pedidos Cozinha / Mesas</a>
+                        <a onclick="navegar('modulo-caixa', this)" class="menu-item active">🛒 PDV / Caixa</a>
+                        <a class="menu-item">🖨️ Pedidos Cozinha / Mesas</a>
                         
                         <div class="menu-category">Estoque & Produtos</div>
-                        <a href="#" class="menu-item active">📦 Controle de Estoque</a>
+                        <a onclick="navegar('modulo-estoque', this)" class="menu-item">📦 Controle de Estoque</a>
                         
                         <div class="menu-category">Financeiro & Despesas</div>
-                        <a href="#" class="menu-item">📊 Dashboard de Lucro</a>
-                        <a href="#" class="menu-item">💸 Acerto Motoboy / Taxas</a>
-                        <a href="#" class="menu-item">🤝 Diária Freelancers</a>
+                        <a class="menu-item">📊 Dashboard de Lucro</a>
+                        <a class="menu-item">💸 Acerto Motoboy / Taxas</a>
+                        <a class="menu-item">🤝 Diária Freelancers</a>
                         
                         <div class="menu-category">Integrações & Sistema</div>
-                        <a href="#" class="menu-item">📱 iFood / 99Food / WhatsApp</a>
-                        <a href="#" class="menu-item">⚙️ Acesso e Permissões</a>
+                        <a class="menu-item">📱 iFood / 99Food / WhatsApp</a>
+                        <a class="menu-item">⚙️ Acesso e Permissões</a>
                         
                         <div class="user-profile">
                             👤 Acesso logado: <b>PROPRIETÁRIO</b>
                         </div>
                     </div>
+                    
                     <div class="main-content">
-                        <div class="header">
-                            <div>
-                                <h2 style="margin: 0;">Gestão de Estoque e Cardápio</h2>
-                                <p style="color: #64748b; margin-top: 5px;">Módulo 1 - Estrutura Base</p>
+                        
+                        <!-- MÓDULO 2: PDV / CAIXA -->
+                        <div id="modulo-caixa" class="modulo active">
+                            <div class="header">
+                                <div>
+                                    <h2 style="margin: 0;">Frente de Caixa (PDV)</h2>
+                                    <p style="color: #64748b; margin-top: 5px;">Módulo 2 - Vendas Dinâmicas</p>
+                                </div>
                             </div>
-                            <button class="btn btn-primary" onclick="abrirModal()">➕ Novo Produto</button>
+                            
+                            <div class="pdv-container">
+                                <div class="pdv-produtos">
+                                    <div class="grid-produtos">
+                                        GRID_DE_PRODUTOS_AQUI
+                                    </div>
+                                </div>
+                                <div class="pdv-comanda">
+                                    <div class="comanda-header">
+                                        <h3>Comanda Atual</h3>
+                                    </div>
+                                    <div class="comanda-itens" id="carrinho-itens">
+                                        <p style="text-align:center; color:#94a3b8; margin-top: 50px;">A comanda está vazia.<br>Clique nos produtos para adicionar.</p>
+                                    </div>
+                                    <div class="comanda-footer">
+                                        <div class="total-row">
+                                            <span>Total:</span>
+                                            <span id="carrinho-total">R$ 0.00</span>
+                                        </div>
+                                        <button class="btn btn-primary btn-block" onclick="alert('Em breve finalizaremos a venda no banco!')">Finalizar Pedido</button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="card">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Produto</th>
-                                        <th>Categoria</th>
-                                        <th>Estoque Atual</th>
-                                        <th>Valor Venda</th>
-                                        <th>Ações Rápidas</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    LINHAS_DA_TABELA_AQUI
-                                </tbody>
-                            </table>
+
+                        <!-- MÓDULO 1: ESTOQUE (Oculto inicialmente) -->
+                        <div id="modulo-estoque" class="modulo">
+                            <div class="header">
+                                <div>
+                                    <h2 style="margin: 0;">Gestão de Estoque e Cardápio</h2>
+                                    <p style="color: #64748b; margin-top: 5px;">Módulo 1 - Estrutura Base</p>
+                                </div>
+                                <button class="btn btn-primary" onclick="abrirModal()">➕ Novo Produto</button>
+                            </div>
+                            <div class="card">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Produto</th>
+                                            <th>Categoria</th>
+                                            <th>Estoque Atual</th>
+                                            <th>Valor Venda</th>
+                                            <th>Ações Rápidas</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        LINHAS_DA_TABELA_AQUI
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
+
                     </div>
 
                     <div class="modal-overlay" id="modalNovoProduto">
@@ -243,6 +316,61 @@ public class Main {
                     </div>
 
                     <script>
+                        function navegar(idModulo, elementoMenu) {
+                            document.querySelectorAll('.modulo').forEach(mod => mod.classList.remove('active'));
+                            document.getElementById(idModulo).classList.add('active');
+                            document.querySelectorAll('.menu-item').forEach(item => item.classList.remove('active'));
+                            elementoMenu.classList.add('active');
+                        }
+
+                        let carrinho = [];
+
+                        function adicionarAoCarrinho(id, nome, preco) {
+                            let itemExistente = carrinho.find(i => i.id === id);
+                            if (itemExistente) {
+                                itemExistente.quantidade += 1;
+                            } else {
+                                carrinho.push({ id: id, nome: nome, preco: preco, quantidade: 1 });
+                            }
+                            renderizarCarrinho();
+                        }
+
+                        function removerDoCarrinho(index) {
+                            carrinho.splice(index, 1);
+                            renderizarCarrinho();
+                        }
+
+                        function renderizarCarrinho() {
+                            let divItens = document.getElementById('carrinho-itens');
+                            let divTotal = document.getElementById('carrinho-total');
+                            
+                            if (carrinho.length === 0) {
+                                divItens.innerHTML = '<p style="text-align:center; color:#94a3b8; margin-top: 50px;">A comanda está vazia.<br>Clique nos produtos para adicionar.</p>';
+                                divTotal.innerText = 'R$ 0.00';
+                                return;
+                            }
+
+                            let html = '';
+                            let total = 0;
+
+                            carrinho.forEach((item, index) => {
+                                let subtotal = item.preco * item.quantidade;
+                                total += subtotal;
+                                html += `
+                                    <div class="comanda-item">
+                                        <div class="item-info">
+                                            <h5>${item.quantidade}x ${item.nome}</h5>
+                                            <small onclick="removerDoCarrinho(${index})">Remover</small>
+                                        </div>
+                                        <div class="item-preco">R$ ${subtotal.toFixed(2)}</div>
+                                    </div>
+                                `;
+                            });
+
+                            divItens.innerHTML = html;
+                            divTotal.innerText = 'R$ ' + total.toFixed(2);
+                        }
+
                         function abrirModal() { document.getElementById('modalNovoProduto').style.display = 'flex'; }
                         function fecharModal() { document.getElementById('modalNovoProduto').style.display = 'none'; }
                         function fecharModalEditar() { document.getElementById('modalEditarProduto').style.display = 'none'; }
@@ -304,7 +432,8 @@ public class Main {
                     </script>
                 </body>
                 </html>
-                """.replace("LINHAS_DA_TABELA_AQUI", linhasTabela.toString());
+                """.replace("LINHAS_DA_TABELA_AQUI", linhasTabela.toString())
+                   .replace("GRID_DE_PRODUTOS_AQUI", gridProdutos.toString());
 
             byte[] res = htmlCompleto.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
