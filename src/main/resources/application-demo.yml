@@ -1,0 +1,12 @@
+# Perfil "demo": carrega cardápio e insumos de exemplo e cria usuários com senha conhecida.
+# Usar apenas em banco de demonstração (ex.: a versão pública do portfólio), nunca no banco de produção.
+spring:
+  flyway:
+    locations: classpath:db/migration,classpath:db/vendor/{vendor},classpath:db/demo
+    # Os dados demo usam versões V900+; num banco demo já populado, migrations posteriores
+    # com número menor (ex.: V8) só são aplicadas com out-of-order.
+    out-of-order: true
+
+app:
+  seed:
+    usuarios-demo: true

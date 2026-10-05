@@ -1,0 +1,60 @@
+# Configuração comum a todos os ambientes.
+# Sem SPRING_PROFILES_ACTIVE, a aplicação sobe no perfil "dev" (H2 em arquivo + dados de demonstração).
+spring:
+  application:
+    name: point-do-frango
+  profiles:
+    default: dev
+    group:
+      dev: demo
+  jpa:
+    open-in-view: false            # evita consultas escondidas durante a renderização do JSON
+    hibernate:
+      ddl-auto: validate           # quem cria/altera tabelas é o Flyway; o Hibernate só confere
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    locations: classpath:db/migration,classpath:db/vendor/{vendor}
+    baseline-on-migrate: true      # permite rodar num banco que já tem as tabelas antigas (produtos, vendas...)
+    baseline-version: 0
+  jackson:
+    default-property-inclusion: non_null
+
+server:
+  port: ${PORT:8080}
+  mime-mappings:
+    webmanifest: application/manifest+json
+  error:
+    include-stacktrace: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+app:
+  # Fuso usado para "fechar o dia". O servidor do Render roda em UTC:
+  # sem isso, uma venda às 22h de Brasília cairia no dia seguinte.
+  zona: America/Sao_Paulo
+  jwt:
+    secret: ${APP_JWT_SECRET:}
+    expiracao-horas: 12
+  admin:
+    username: ${APP_ADMIN_USERNAME:}
+    password: ${APP_ADMIN_PASSWORD:}
+  integracao:
+    api-key: ${APP_INTEGRACAO_API_KEY:}
+  seed:
+    usuarios-demo: false
+  lgpd:
+    retencao-dias: ${APP_LGPD_RETENCAO_DIAS:365}
+  android:
+    pacote: ${APP_ANDROID_PACOTE:}
+    sha256: ${APP_ANDROID_SHA256:}

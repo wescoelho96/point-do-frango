@@ -1,0 +1,13 @@
+# Produção (Render + Supabase). Todos os segredos vêm de variáveis de ambiente.
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 5         # o plano gratuito do Supabase limita conexões
+      minimum-idle: 1
+
+springdoc:
+  swagger-ui:
+    enabled: true                  # só documenta; todos os endpoints de dados continuam exigindo token

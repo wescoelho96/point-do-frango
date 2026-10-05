@@ -1,0 +1,29 @@
+# Blueprint do Render (Dashboard > New > Blueprint). As variáveis com "sync: false"
+# são informadas no painel e ficam armazenadas apenas no Render, fora do repositório.
+services:
+  - type: web
+    name: point-do-frango
+    runtime: docker
+    plan: free
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: DB_URL
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: APP_JWT_SECRET
+        generateValue: true
+      - key: APP_ADMIN_USERNAME
+        sync: false
+      - key: APP_ADMIN_PASSWORD
+        sync: false
+      - key: APP_INTEGRACAO_API_KEY
+        sync: false
+      - key: APP_ANDROID_PACOTE
+        sync: false
+      - key: APP_ANDROID_SHA256
+        sync: false

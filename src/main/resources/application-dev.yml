@@ -1,0 +1,18 @@
+# Desenvolvimento local: banco H2 gravado em arquivo (pasta ./dados), para que os dados
+# persistam entre reinicializações. Para recomeçar do zero, basta apagar a pasta "dados".
+# A pasta está no .gitignore porque pode conter dados reais de clientes.
+# Console do banco: http://localhost:8080/h2-console (acesso apenas local; usuário "sa", sem senha)
+spring:
+  datasource:
+    url: jdbc:h2:file:./dados/pointdofrango;AUTO_SERVER=TRUE;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: true
+      settings:
+        web-allow-others: false
+
+app:
+  jwt:
+    secret: ${APP_JWT_SECRET:dev-only-secret-nao-use-em-producao-0123456789}
