@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="description" content="PDV, comandas, cozinha em tempo real, estoque e financeiro para lanchonetes.">
+  <meta name="theme-color" content="#1e1d22">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Point do Frango">
+  <title>Point do Frango</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/favicon-64.png" type="image/png" sizes="64x64">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="/css/app.css">
+  <script type="module" src="/js/main.js"></script>
+</head>
+<body>
+  <!-- Login -->
+  <section id="tela-login" class="login hidden">
+    <form id="form-login" class="login-card stack" autocomplete="on">
+      <img src="/img/logo.jpg" alt="Point do Frango: crocante, suculento e feito na hora!" width="190" height="220" class="logo-login">
+      <p class="text-2" style="text-align:center;margin:0">PDV, comandas, cozinha e financeiro</p>
+      <label class="field">Usuário
+        <input name="username" autocomplete="username" required maxlength="50" autocapitalize="none">
+      </label>
+      <label class="field" for="campo-senha">Senha</label>
+      <div class="campo-senha">
+        <input id="campo-senha" name="senha" type="password" autocomplete="current-password" required maxlength="100"
+               aria-describedby="aviso-caps">
+        <!-- Segure para ver a senha; soltou, ela some de novo -->
+        <button type="button" id="btn-ver-senha" class="btn-olho" aria-label="Segure para mostrar a senha" title="Segure para mostrar a senha">
+          <svg class="olho-aberto" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+          <svg class="olho-fechado" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 3l18 18M10.6 5.1A10.4 10.4 0 0 1 12 5c6.4 0 10 7 10 7a17.7 17.7 0 0 1-3.2 4.1M6.6 6.6C3.9 8.3 2 12 2 12s3.6 7 10 7a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
+        </button>
+      </div>
+      <p id="aviso-caps" class="aviso-caps hidden" role="status">⇪ Caps Lock está ativado</p>
+      <label class="row" style="gap:8px;font-size:.9rem">
+        <input type="checkbox" name="lembrar" style="width:auto"> Manter conectado neste aparelho
+      </label>
+      <button class="btn btn-primary btn-block" type="submit">Entrar</button>
+      <p id="login-erro" class="bad hidden" role="alert"></p>
+      <p class="muted" style="margin:0;font-size:.8rem;text-align:center"><a href="/privacidade.html">Política de privacidade</a></p>
+    </form>
+  </section>
+
+  <!-- Aplicação -->
+  <div id="app" class="shell hidden">
+    <nav class="sidebar" aria-label="Menu principal">
+      <div class="brand"><img src="/icons/icon-192.png" alt="" width="28" height="28"> Point do Frango</div>
+      <button class="nav-btn" data-view="pdv">🛒 <span>PDV</span></button>
+      <button class="nav-btn" data-view="comandas">🍽️ <span>Comandas</span></button>
+      <button class="nav-btn" data-view="cozinha">👨‍🍳 <span>Cozinha</span></button>
+      <button class="nav-btn" data-view="pedidos">🧾 <span>Pedidos</span></button>
+      <button class="nav-btn" data-view="entregas">🛵 <span>Entregas</span></button>
+      <button class="nav-btn" data-view="caixa">💵 <span>Caixa</span></button>
+      <button class="nav-btn" data-view="clientes">👥 <span>Clientes</span></button>
+      <button class="nav-btn" data-view="estoque">📦 <span>Estoque</span></button>
+      <button class="nav-btn" data-view="cardapio">🍟 <span>Cardápio</span></button>
+      <button class="nav-btn" data-view="financeiro">💰 <span>Financeiro</span></button>
+      <button class="nav-btn" data-view="config">⚙️ <span>Config.</span></button>
+      <div class="sidebar-footer">
+        <div class="quem"><strong id="usuario-nome"></strong><br><span id="usuario-perfil" class="muted"></span></div>
+        <button id="btn-instalar" class="btn btn-sm btn-primary hidden">📲 Instalar app</button>
+        <button id="btn-sair" class="btn btn-sm">Sair</button>
+      </div>
+    </nav>
+    <main id="conteudo" class="main" tabindex="-1"></main>
+  </div>
+
+  <dialog id="modal"></dialog>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <!-- Cupom montado aqui só na hora de imprimir (ver js/imprimir.js) -->
+  <div id="impressao" aria-hidden="true"></div>
+</body>
+</html>

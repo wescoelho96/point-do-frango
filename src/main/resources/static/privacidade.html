@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1e1d22">
+  <link rel="icon" href="/icons/favicon-64.png" type="image/png">
+  <title>Política de privacidade · Point do Frango</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <main class="main" style="max-width:760px;margin:0 auto">
+    <article class="card stack">
+      <h1>Política de privacidade</h1>
+      <p class="muted">Aplicativo Point do Frango (PDV, cozinha, estoque e financeiro para lanchonetes). Última atualização: outubro de 2026.</p>
+
+      <h2>Quem usa o aplicativo</h2>
+      <p>O aplicativo é uma ferramenta de gestão usada pela equipe do estabelecimento (dono, atendentes e cozinha).
+        O acesso exige usuário e senha criados pelo administrador do estabelecimento.</p>
+
+      <h2>Quais dados são tratados</h2>
+      <ul>
+        <li><strong>Usuários da equipe:</strong> nome, login e senha (guardada apenas como hash criptográfico BCrypt, nunca em texto).</li>
+        <li><strong>Operação da loja:</strong> cardápio, estoque, pedidos, comandas, pagamentos e relatórios financeiros.</li>
+        <li><strong>Clientes de entrega:</strong> nome, telefone, endereço, ponto de referência e bairro. São necessários para levar o pedido
+          (LGPD, art. 7º, V: execução do contrato de compra e entrega). Não pedimos CPF, e-mail nem data de nascimento.</li>
+      </ul>
+
+      <h2>Para que são usados</h2>
+      <p>Exclusivamente para operar o estabelecimento: lançar e preparar pedidos, controlar estoque, emitir a conta e calcular o financeiro.
+        Não há publicidade, venda de dados nem rastreamento de navegação.</p>
+
+      <h2>Onde ficam e com quem são compartilhados</h2>
+      <p>Os dados ficam no servidor e no banco de dados contratados pelo estabelecimento, com conexão criptografada (HTTPS/TLS).
+        Não são compartilhados com terceiros, exceto quando a integração com automação de WhatsApp é ativada pelo próprio estabelecimento.</p>
+      <p>No aparelho fica apenas o token de acesso da sessão e preferências locais (como a largura da impressora).
+        Os dados de pedidos e do financeiro não são guardados no aparelho.</p>
+
+      <h2>Permissões do aparelho</h2>
+      <p>A câmera só é usada quando o dono toca em "📷" para ler o código de barras de uma conta (água, luz); a imagem é lida
+        no próprio aparelho e não é guardada nem enviada. O aplicativo não acessa microfone, contatos nem localização.
+        A impressão usa o serviço de impressão do próprio Android.</p>
+
+      <h2>Por quanto tempo</h2>
+      <p>O cadastro do cliente é guardado para agilizar os próximos pedidos e é apagado automaticamente depois de 12 meses sem pedidos.
+        Nos pedidos com mais de 12 meses, nome, telefone e endereço são removidos; ficam apenas os valores, para a contabilidade.</p>
+      <p>O motoboy recebe o endereço e o telefone apenas na via impressa da entrega. A cozinha vê o pedido e o bairro, sem o telefone.</p>
+
+      <h2>Seus direitos (LGPD)</h2>
+      <p>Clientes e membros da equipe podem pedir acesso, correção ou exclusão dos seus dados diretamente ao estabelecimento,
+        que é o controlador dos dados conforme a Lei nº 13.709/2018.</p>
+    </article>
+  </main>
+</body>
+</html>
