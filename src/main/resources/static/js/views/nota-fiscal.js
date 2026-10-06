@@ -84,7 +84,10 @@ export function abrirImportacao(insumos, aoImportar) {
 
       form.chave.addEventListener('input', async () => {
         const chave = form.chave.value.replace(/\D/g, '');
-        if (chave.length !== 44) return;
+        if (chave.length !== 44) {
+          mostrar(chave.length ? html`<span class="muted">${chave.length} de 44 números</span>` : '');
+          return;
+        }
         try {
           const r = await api.get(`/notas/chave/${chave}`);
           const c = r.chave;
@@ -120,7 +123,9 @@ export function abrirImportacao(insumos, aoImportar) {
       form.addEventListener('change', atualizarEntradas);
     },
     aoSalvar: async (d) => {
-      if (!previa) throw new Error('Escolha o arquivo XML da nota.');
+      if (!previa) {
+        throw new Error('A chave só confere a nota. Para dar entrada nos itens, escolha também o arquivo XML da nota.');
+      }
       if (previa.jaImportada) throw new Error('Esta nota já foi importada.');
       const itens = previa.itens.map(({ item }) => ({
         numero: item.numero,

@@ -45,6 +45,9 @@ class LeitorNfeTest {
         assertThat(c.numero()).isEqualTo("12345");
         assertThat(c.emissao()).isEqualTo(YearMonth.of(2026, 10));
         assertThatThrownBy(() -> LeitorNfe.lerChave(CHAVE.substring(0, 43) + "5")).isInstanceOf(RegraDeNegocioException.class);
+        String mesInvalido = "352613" + CHAVE.substring(6, 43);
+        assertThatThrownBy(() -> LeitorNfe.lerChave(mesInvalido + LeitorNfe.digitoChave(mesInvalido)))
+                .isInstanceOf(RegraDeNegocioException.class);
     }
 
     @Test

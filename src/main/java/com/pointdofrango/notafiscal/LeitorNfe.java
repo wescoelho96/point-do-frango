@@ -46,8 +46,12 @@ public final class LeitorNfe {
         if (digitoChave(c.substring(0, 43)) != c.charAt(43) - '0') {
             throw new RegraDeNegocioException("Chave de acesso inválida: confira os números.");
         }
-        return new Chave(c, c.substring(0, 2), YearMonth.of(2000 + Integer.parseInt(c.substring(2, 4)),
-                Integer.parseInt(c.substring(4, 6))), c.substring(6, 20), c.substring(20, 22),
+        int mes = Integer.parseInt(c.substring(4, 6));
+        if (mes < 1 || mes > 12) {
+            throw new RegraDeNegocioException("Chave de acesso inválida: confira os números.");
+        }
+        return new Chave(c, c.substring(0, 2), YearMonth.of(2000 + Integer.parseInt(c.substring(2, 4)), mes),
+                c.substring(6, 20), c.substring(20, 22),
                 c.substring(22, 25).replaceFirst("^0+(?!$)", ""), c.substring(25, 34).replaceFirst("^0+(?!$)", ""));
     }
 
