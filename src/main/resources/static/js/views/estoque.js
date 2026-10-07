@@ -52,6 +52,12 @@ const faixa = (lista, campo) => {
   return Math.abs(max - min) < 0.005 ? moeda(max) : `${moeda(min)} a ${moeda(max)}`;
 };
 
+const faixaPct = (lista) => {
+  const min = Math.min(...lista.map((m) => m.margem));
+  const max = Math.max(...lista.map((m) => m.margem));
+  return Math.abs(max - min) < 0.5 ? pct(max) : `${pct(min)} a ${pct(max)}`;
+};
+
 const SEM_GRUPO = 'Sem grupo';
 const SUGESTOES_GRUPO = ['Carnes', 'Congelados', 'Refrigerantes', 'Cervejas', 'Águas', 'Sucos', 'Óleos e molhos',
   'Embalagens', 'Limpeza', 'Descartáveis'];
@@ -173,7 +179,7 @@ export async function montar(container) {
       <td class="num right">${moeda(i.custoUnitario)}/${i.sigla}</td>
       <td class="num right">${moeda(i.valorEmEstoque)}</td>
       <td class="num right">${margens.length ? html`<strong class="${margens.some((m) => m.lucro < 0) ? 'bad' : ''}">${faixa(margens, 'lucroPorUnidade')}</strong>/${i.sigla}
-        <div class="muted" style="font-size:.78rem">${margens.length} produto(s) · estoque rende ${faixa(margens.map((m) => ({ v: m.porcoesNoEstoque * m.lucro })), 'v')}</div>`
+        <div class="muted" style="font-size:.78rem">margem ${faixaPct(margens)} · ${margens.length} produto(s) · estoque rende ${faixa(margens.map((m) => ({ v: m.porcoesNoEstoque * m.lucro })), 'v')}</div>`
         : html`<span class="muted" title="Não é o ingrediente principal de nenhum produto">—</span>`}</td>
       ${celulaReposicao(i)}`;
   }
@@ -185,8 +191,12 @@ export async function montar(container) {
       : html`<span class="muted">—</span>`}</td>`;
   }
 
-  /** Produto de revenda: ficha técnica só com este insumo (bebida, item pronto). */
-  const produtoDeRevenda = (i) => produtos.find((p) => p.fichaTecnica.length === 1 && p.fichaTecnica[0].insumoId === i.id);
+  /** Produtos cuja ficha técnica tem só este insumo. */
+  const soDesteInsumo = (i) => produtos.filter((p) => p.fichaTecnica.length === 1 && p.fichaTecnica[0].insumoId === i.id);
+
+  /** Revenda: cada venda baixa 1 unidade do insumo (bebida, item pronto). Iscas por kg não entram aqui. */
+  const produtoDeRevenda = (i) => (i.sigla === 'un'
+    ? soDesteInsumo(i).find((p) => Number(p.fichaTecnica[0].quantidade) === 1) : undefined);
 
   function linhaEmbalagem(e, sigla) {
     return html`
@@ -242,6 +252,10 @@ export async function montar(container) {
 
   function secaoVenda(i) {
     const revenda = i ? produtoDeRevenda(i) : null;
+    // Ingrediente de prato (frango, batata): o lucro aparece por produto, não por preço do insumo.
+    if (!revenda && i && margensDoInsumo(i, produtos).length) {
+      return html`<div class="card" style="background:var(--surface-2)">${tabelaLucro(i)}</div>`;
+    }
     const usa = revenda ? Number(revenda.fichaTecnica[0].quantidade) : 1;
     return html`
       <div class="card" style="background:var(--surface-2)">
@@ -261,6 +275,7 @@ export async function montar(container) {
   function prepararFormInsumo(form) {
     const lucro = form.querySelector('[data-lucro-unidade]');
     const atualizarLucro = () => {
+      if (!lucro) return;
       const custo = (decimal(form.custoUnitario.value) || 0) * Number(lucro.dataset.usa);
       const preco = decimal(form.precoVenda.value) || 0;
       if (!preco) { lucro.textContent = ''; return; }
@@ -485,10 +500,10 @@ export async function montar(container) {
   container.addEventListener('change', aoFiltrar);
 
   function confirmarExclusao(i) {
-    const revenda = produtoDeRevenda(i);
+    const juntos = soDesteInsumo(i).map((p) => p.nome).join(', ');
     modal({
       titulo: `Excluir ${i.nome}`,
-      corpo: html`<p class="text-2" style="margin:0">O insumo sai do estoque${revenda ? html` e o produto <strong>${revenda.nome}</strong> sai do cardápio` : ''}.
+      corpo: html`<p class="text-2" style="margin:0">O insumo sai do estoque${juntos ? html` e <strong>${juntos}</strong> sai do cardápio` : ''}.
         Não dá para desfazer. Item que já foi vendido não pode ser excluído: desmarque "Ativo" para tirá-lo da lista.</p>`,
       textoSalvar: 'Excluir',
       perigo: true,

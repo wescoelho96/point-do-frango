@@ -107,7 +107,7 @@ export async function montar(container) {
                   <td>${p.categoriaRotulo}</td>
                   <td class="num right">${moeda(p.precoVenda)}</td>
                   <td class="num right">${moeda(p.custoAtual)}</td>
-                  <td class="num right">${moeda(p.margemValor)}</td>
+                  <td class="num right ${Number(p.margemValor) < 0 ? 'bad' : ''}">${moeda(p.margemValor)} <span class="muted">${pct(p.margemPercentual)}</span></td>
                   <td><span class="badge ${classe}">${pct(p.cmvPercentual)} · ${texto}</span></td>
                   <td class="num right">${p.unidadesDisponiveis}</td>
                   <td class="right"><button class="btn btn-sm" data-acao="editar" data-id="${p.id}">Editar</button></td>

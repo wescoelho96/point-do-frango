@@ -99,7 +99,7 @@ public class ProdutoService {
      * embalagem usada no rendimento), a alteração do insumo é desfeita.
      */
     /**
-     * Item de revenda (ficha só com este insumo) que nunca foi vendido sai junto com o insumo.
+     * Produto feito só com este insumo (bebida, porção de um ingrediente) que nunca foi vendido sai junto com ele.
      * Prato que usa o insumo junto com outros, ou produto com histórico, bloqueia a exclusão.
      */
     @EventListener
