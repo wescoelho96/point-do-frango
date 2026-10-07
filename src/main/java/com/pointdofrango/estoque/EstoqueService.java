@@ -3,6 +3,8 @@ package com.pointdofrango.estoque;
 import com.pointdofrango.estoque.EstoqueDtos.AjusteRequest;
 import com.pointdofrango.estoque.EstoqueDtos.EntradaRequest;
 import com.pointdofrango.estoque.EstoqueDtos.InsumoRequest;
+import com.pointdofrango.estoque.EstoqueDtos.ReposicaoResponse;
+import com.pointdofrango.shared.Dinheiro;
 import com.pointdofrango.shared.EstoqueInsuficienteException;
 import com.pointdofrango.shared.RecursoNaoEncontradoException;
 import com.pointdofrango.shared.RegraDeNegocioException;
@@ -90,6 +92,34 @@ public class EstoqueService {
         } else {
             insumo.desativar();
         }
+    }
+
+    /**
+     * Só apaga insumo sem histórico de venda ou consumo; os demais ficam inativos para não perder o extrato.
+     * Produtos e notas fiscais que apontam para ele reagem ao evento na mesma transação.
+     */
+    @Transactional
+    public void excluir(Long id) {
+        Insumo insumo = buscar(id);
+        if (movimentacoes.existsByInsumoIdAndTipoIn(id, List.of(TipoMovimentacao.SAIDA_VENDA,
+                TipoMovimentacao.ESTORNO_VENDA, TipoMovimentacao.CONSUMO_INTERNO))) {
+            throw new RegraDeNegocioException(insumo.getNome() + " já foi vendido ou consumido e faz parte do histórico. "
+                    + "Para tirar da lista, desmarque \"Ativo\".");
+        }
+        eventos.publishEvent(new InsumoExcluido(id, insumo.getNome()));
+        movimentacoes.apagarDoInsumo(id);
+        insumos.delete(insumo);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ReposicaoResponse> reposicao() {
+        return movimentacoes.vendasDesdeAUltimaEntrada(
+                        List.of(TipoMovimentacao.SAIDA_VENDA, TipoMovimentacao.ESTORNO_VENDA), TipoMovimentacao.ENTRADA)
+                .stream()
+                .map(l -> new ReposicaoResponse((Long) l[0], ((BigDecimal) l[1]).negate(),
+                        Dinheiro.centavos(((BigDecimal) l[2]).negate())))
+                .filter(r -> r.vendido().signum() > 0)
+                .toList();
     }
 
     @Transactional

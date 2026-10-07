@@ -3,6 +3,7 @@ package com.pointdofrango.notafiscal;
 import com.pointdofrango.caixa.CaixaService;
 import com.pointdofrango.estoque.EstoqueDtos.EntradaRequest;
 import com.pointdofrango.estoque.EstoqueService;
+import com.pointdofrango.estoque.InsumoExcluido;
 import com.pointdofrango.financeiro.CategoriaSaida;
 import com.pointdofrango.financeiro.FormaPagamento;
 import com.pointdofrango.loja.LojaService;
@@ -14,6 +15,7 @@ import com.pointdofrango.saida.SaidaService.NovaSaida;
 import com.pointdofrango.shared.RegraDeNegocioException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -135,6 +137,12 @@ public class NotaFiscalService {
         notas.save(new NotaFiscalCompra(nota, fornecedor.getId(), usuario, Instant.now(clock)));
         log.info("NF-e {} importada por {}: {} entrada(s), total {}", nota.chave(), usuario, entradas, nota.valorTotal());
         return new Resultado(nota.chave(), entradas, nota.itens().size() - entradas, nota.valorTotal());
+    }
+
+    /** Insumo apagado: a próxima nota deste fornecedor volta a pedir a ligação do item. */
+    @EventListener
+    public void aoExcluirInsumo(InsumoExcluido evento) {
+        itensFornecedor.deleteAll(itensFornecedor.findByInsumoId(evento.insumoId()));
     }
 
     @Transactional(readOnly = true)

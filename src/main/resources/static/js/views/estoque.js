@@ -61,12 +61,16 @@ export async function montar(container) {
   let insumos = [];
   let produtos = [];
   let fornecedores = [];
+  let reposicao = new Map();
   const filtro = { texto: '', grupo: '', repor: false };
 
   async function carregar() {
-    [insumos, produtos, fornecedores] = await Promise.all([
+    let paraRepor;
+    [insumos, produtos, fornecedores, paraRepor] = await Promise.all([
       api.get('/insumos'), api.get('/produtos'), admin ? api.get('/fornecedores') : [],
+      admin ? api.get('/insumos/reposicao') : [],
     ]);
+    reposicao = new Map(paraRepor.map((r) => [r.insumoId, r]));
     desenhar();
   }
 
@@ -80,11 +84,13 @@ export async function montar(container) {
   function desenhar() {
     const alertas = insumos.filter((i) => i.ativo && i.abaixoDoMinimo);
     const valorTotal = insumos.reduce((soma, i) => soma + Number(i.valorEmEstoque ?? 0), 0);
+    const totalRepor = [...reposicao.values()].reduce((soma, r) => soma + Number(r.valor), 0);
     renderizar(container, html`
       <div class="page-head">
         <div>
           <h1>Estoque de insumos</h1>
-          <p>${insumos.length} insumos${admin ? ` · ${moeda(valorTotal)} parados em mercadoria` : ''}${alertas.length
+          <p>${insumos.length} insumos${admin ? ` · ${moeda(valorTotal)} parados em mercadoria` : ''}${admin && totalRepor
+            ? html` · <strong>${moeda(totalRepor)}</strong> para separar e repor o que foi vendido` : ''}${alertas.length
             ? html` · <span class="bad">⚠️ ${alertas.length} abaixo do mínimo</span>` : ''}</p>
         </div>
         <div class="row">
@@ -140,19 +146,21 @@ export async function montar(container) {
 
   function desenharTabela() {
     const lista = filtrados();
-    const colunas = admin ? 7 : 4;
+    const colunas = admin ? 8 : 4;
     const porGrupo = grupos().map((g) => [g, lista.filter((i) => (i.grupo || SEM_GRUPO) === g)]).filter(([, l]) => l.length);
     renderizar(container.querySelector('[data-tabela]'), lista.length ? html`
       <table>
         <thead><tr>
           <th>Insumo</th><th class="right">Saldo</th><th class="right">Mínimo</th>
           ${admin ? html`<th class="right">Custo médio</th><th class="right">Valor em estoque</th>
-            <th class="right" title="Quanto sobra de lucro para cada kg/un deste insumo que vira produto">Lucro por kg / un</th>` : ''}<th></th>
+            <th class="right" title="Quanto sobra de lucro para cada kg/un deste insumo que vira produto">Lucro por kg / un</th>
+            <th class="right" title="Custo do que foi vendido desde a última compra deste item. Zera ao registrar uma nova entrada.">Separar p/ repor</th>` : ''}<th></th>
         </tr></thead>
         <tbody>${porGrupo.map(([g, itens]) => html`
           ${porGrupo.length > 1 || g !== SEM_GRUPO ? html`<tr class="grupo-linha"><td colspan="${colunas}">${g}
             <span class="muted" style="font-weight:400">· ${itens.length} ${itens.length > 1 ? 'itens' : 'item'}${admin
-              ? ` · ${moeda(itens.reduce((soma, i) => soma + Number(i.valorEmEstoque), 0))}` : ''}${itens.some((i) => i.ativo && i.abaixoDoMinimo)
+              ? ` · ${moeda(itens.reduce((soma, i) => soma + Number(i.valorEmEstoque), 0))}` : ''}${admin && itens.some((i) => reposicao.has(i.id))
+              ? ` · ${moeda(itens.reduce((soma, i) => soma + Number(reposicao.get(i.id)?.valor ?? 0), 0))} a separar` : ''}${itens.some((i) => i.ativo && i.abaixoDoMinimo)
               ? ` · ${itens.filter((i) => i.ativo && i.abaixoDoMinimo).length} a repor` : ''}</span></td></tr>` : ''}
           ${itens.map(linhaInsumo)}`)}
         </tbody>
@@ -166,8 +174,19 @@ export async function montar(container) {
       <td class="num right">${moeda(i.valorEmEstoque)}</td>
       <td class="num right">${margens.length ? html`<strong class="${margens.some((m) => m.lucro < 0) ? 'bad' : ''}">${faixa(margens, 'lucroPorUnidade')}</strong>/${i.sigla}
         <div class="muted" style="font-size:.78rem">${margens.length} produto(s) · estoque rende ${faixa(margens.map((m) => ({ v: m.porcoesNoEstoque * m.lucro })), 'v')}</div>`
-        : html`<span class="muted" title="Não é o ingrediente principal de nenhum produto">—</span>`}</td>`;
+        : html`<span class="muted" title="Não é o ingrediente principal de nenhum produto">—</span>`}</td>
+      ${celulaReposicao(i)}`;
   }
+
+  function celulaReposicao(i) {
+    const r = reposicao.get(i.id);
+    return html`<td class="num right">${r ? html`<strong>${moeda(r.valor)}</strong>
+      <div class="muted" style="font-size:.78rem">${numero(r.vendido)} ${i.sigla} em vendas desde a última compra</div>`
+      : html`<span class="muted">—</span>`}</td>`;
+  }
+
+  /** Produto de revenda: ficha técnica só com este insumo (bebida, item pronto). */
+  const produtoDeRevenda = (i) => produtos.find((p) => p.fichaTecnica.length === 1 && p.fichaTecnica[0].insumoId === i.id);
 
   function linhaEmbalagem(e, sigla) {
     return html`
@@ -193,19 +212,16 @@ export async function montar(container) {
         </label>
         <label class="field"><span>Estoque mínimo (<span data-sigla>${sigla}</span>)</span><input name="estoqueMinimo" required inputmode="decimal" value="${i ? numero(i.estoqueMinimo) : '0'}"></label>
         <label class="field"><span>Custo por <span data-sigla>${sigla}</span> (R$)</span><input name="custoUnitario" required inputmode="decimal" value="${i ? numero(i.custoUnitario, 6) : ''}"></label>
+        <div class="field" style="grid-column:1/-1"><span>Calcular o custo pelo valor pago (opcional)</span>
+          <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
+            Paguei R$ <input name="pagoValor" inputmode="decimal" placeholder="45,00" style="width:110px" aria-label="Valor pago">
+            por <input name="pagoQuantidade" inputmode="decimal" placeholder="6" style="width:80px" aria-label="Quantidade comprada"> <span data-sigla>${sigla}</span>
+            <span class="muted" data-pago-resultado></span>
+          </div></div>
         ${novo ? html`<label class="field"><span>Estoque inicial (<span data-sigla>${sigla}</span>)</span><input name="estoqueInicial" inputmode="decimal" value="0"></label>` : ''}
       </div>
 
-      ${novo ? html`
-        <div class="card" style="background:var(--surface-2)">
-          <label class="row" style="gap:8px;font-weight:600"><input type="checkbox" name="vender" style="width:auto">
-            Também vender no cardápio (bebida, item de revenda)</label>
-          <div class="form-grid" style="margin-top:8px">
-            <label class="field">Preço de venda (R$)<input name="precoVenda" inputmode="decimal" placeholder="Ex.: 16,00"></label>
-            <label class="field">Categoria<select name="categoriaProduto">${['BEBIDA', 'OUTRO', 'PORCAO'].map((c) => html`<option value="${c}">${rotulo(c)}</option>`)}</select></label>
-          </div>
-          <p class="muted" style="margin:6px 0 0;font-size:.8rem">Cria o produto com ficha técnica de 1 unidade: cada venda baixa 1 do estoque.</p>
-        </div>` : ''}
+      ${secaoVenda(novo ? null : i)}
 
       <div>
         <h3>Como chega do fornecedor</h3>
@@ -224,7 +240,48 @@ export async function montar(container) {
       </div>`;
   }
 
+  function secaoVenda(i) {
+    const revenda = i ? produtoDeRevenda(i) : null;
+    const usa = revenda ? Number(revenda.fichaTecnica[0].quantidade) : 1;
+    return html`
+      <div class="card" style="background:var(--surface-2)">
+        ${revenda ? html`<strong>Venda no cardápio: ${revenda.nome}</strong>` : html`
+          <label class="row" style="gap:8px;font-weight:600"><input type="checkbox" name="vender" style="width:auto">
+            Também vender no cardápio (bebida, item de revenda)</label>`}
+        <div class="form-grid" style="margin-top:8px">
+          <label class="field">Preço de venda (R$)<input name="precoVenda" inputmode="decimal" placeholder="Ex.: 10,00"
+            value="${revenda ? numero(revenda.precoVenda, 2) : ''}"></label>
+          ${revenda ? '' : html`<label class="field">Categoria<select name="categoriaProduto">${['BEBIDA', 'OUTRO', 'PORCAO'].map((c) => html`<option value="${c}">${rotulo(c)}</option>`)}</select></label>`}
+        </div>
+        <p style="margin:6px 0 0" data-lucro-unidade data-usa="${usa}"></p>
+        ${revenda ? '' : html`<p class="muted" style="margin:6px 0 0;font-size:.8rem">Cria o produto com ficha técnica de 1 unidade: cada venda baixa 1 do estoque.</p>`}
+      </div>`;
+  }
+
   function prepararFormInsumo(form) {
+    const lucro = form.querySelector('[data-lucro-unidade]');
+    const atualizarLucro = () => {
+      const custo = (decimal(form.custoUnitario.value) || 0) * Number(lucro.dataset.usa);
+      const preco = decimal(form.precoVenda.value) || 0;
+      if (!preco) { lucro.textContent = ''; return; }
+      const ganho = preco - custo;
+      lucro.innerHTML = String(html`Custo ${moeda(custo)} · lucro por unidade
+        <strong class="${ganho < 0 ? 'bad' : 'good'}">${moeda(ganho)}</strong> <span class="muted">(${pct((ganho / preco) * 100)})</span>`);
+    };
+    const pagoResultado = form.querySelector('[data-pago-resultado]');
+    const calcularPago = () => {
+      const valor = decimal(form.pagoValor.value);
+      const quantidade = decimal(form.pagoQuantidade.value);
+      if (!valor || !quantidade) { pagoResultado.textContent = ''; return; }
+      const custo = valor / quantidade;
+      form.custoUnitario.value = custo.toFixed(4).replace(/0{1,2}$/, '').replace('.', ',');
+      pagoResultado.textContent = `= ${moeda(custo)} cada`;
+    };
+    form.pagoValor.addEventListener('input', calcularPago);
+    form.pagoQuantidade.addEventListener('input', calcularPago);
+    form.addEventListener('input', atualizarLucro);
+    atualizarLucro();
+
     const lista = form.querySelector('[data-embalagens]');
     const siglaAtual = () => ({ QUILOGRAMA: 'kg', LITRO: 'L', UNIDADE: 'un', GRAMA: 'g', MILILITRO: 'ml' })[form.unidade.value];
     form.unidade.addEventListener('change', () => form.querySelectorAll('[data-sigla]').forEach((s) => { s.textContent = siglaAtual(); }));
@@ -427,6 +484,22 @@ export async function montar(container) {
   container.addEventListener('input', aoFiltrar);
   container.addEventListener('change', aoFiltrar);
 
+  function confirmarExclusao(i) {
+    const revenda = produtoDeRevenda(i);
+    modal({
+      titulo: `Excluir ${i.nome}`,
+      corpo: html`<p class="text-2" style="margin:0">O insumo sai do estoque${revenda ? html` e o produto <strong>${revenda.nome}</strong> sai do cardápio` : ''}.
+        Não dá para desfazer. Item que já foi vendido não pode ser excluído: desmarque "Ativo" para tirá-lo da lista.</p>`,
+      textoSalvar: 'Excluir',
+      perigo: true,
+      aoSalvar: async () => {
+        await api.del(`/insumos/${i.id}`);
+        toast(`${i.nome} excluído`);
+        await carregar();
+      },
+    });
+  }
+
   const soltar = aoClicar(container, {
     novo: () => abrirCadastro(null),
     duplicar: (el) => {
@@ -441,14 +514,35 @@ export async function montar(container) {
       const i = insumo(el.dataset.id);
       modal({
         titulo: `Editar ${i.nome}`,
+        largo: true,
         corpo: html`${formInsumo(i)}
-          <label class="row" style="gap:6px"><input type="checkbox" name="ativo" ${i.ativo ? 'checked' : ''} style="width:auto"> Ativo</label>`,
-        aoAbrir: prepararFormInsumo,
+          <div class="row" style="justify-content:space-between">
+            <label class="row" style="gap:6px"><input type="checkbox" name="ativo" ${i.ativo ? 'checked' : ''} style="width:auto"> Ativo</label>
+            <button type="button" class="btn btn-sm btn-danger" data-excluir>Excluir insumo</button>
+          </div>`,
+        aoAbrir: (form) => {
+          prepararFormInsumo(form);
+          form.querySelector('[data-excluir]').addEventListener('click', () => {
+            document.getElementById('modal').close();
+            confirmarExclusao(i);
+          });
+        },
         aoSalvar: async (d, form) => {
+          const revenda = produtoDeRevenda(i);
+          const preco = decimal(d.precoVenda);
+          if (d.vender === 'on' && !preco) throw new Error('Informe o preço de venda.');
           await api.put(`/insumos/${i.id}`, corpoInsumo(d, form));
           const ativo = d.ativo === 'on';
           if (ativo !== i.ativo) await api.patch(`/insumos/${i.id}/ativo?valor=${ativo}`);
-          toast('Insumo atualizado (fichas técnicas recalculadas)');
+          if (revenda && preco && preco !== Number(revenda.precoVenda)) {
+            await api.patch(`/produtos/${revenda.id}/preco`, { precoVenda: preco });
+          } else if (!revenda && d.vender === 'on') {
+            await api.post('/produtos', {
+              nome: d.nome, categoria: d.categoriaProduto, descricao: null, precoVenda: preco,
+              fichaTecnica: [{ insumoId: i.id, modo: 'UNIDADE_BASE', quantidade: 1 }],
+            });
+          }
+          toast('Insumo atualizado');
           await carregar();
         },
       });

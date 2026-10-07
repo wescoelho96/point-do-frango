@@ -9,5 +9,7 @@ public interface ItemFornecedorRepository extends JpaRepository<ItemFornecedor, 
 
     List<ItemFornecedor> findByFornecedorId(Long fornecedorId);
 
+    List<ItemFornecedor> findByInsumoId(Long insumoId);
+
     Optional<ItemFornecedor> findByFornecedorIdAndCodigoProduto(Long fornecedorId, String codigoProduto);
 }

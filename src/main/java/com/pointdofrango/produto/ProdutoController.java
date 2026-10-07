@@ -5,6 +5,8 @@ import com.pointdofrango.produto.ProdutoDtos.ProdutoResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
@@ -61,6 +64,15 @@ public class ProdutoController {
     @PutMapping("/{id}")
     public ProdutoResponse atualizar(@PathVariable Long id, @Valid @RequestBody ProdutoRequest req) {
         return ProdutoResponse.de(service.atualizar(id, req));
+    }
+
+    public record PrecoRequest(@NotNull @DecimalMin("0.01") BigDecimal precoVenda) {
+    }
+
+    @PatchMapping("/{id}/preco")
+    @Operation(summary = "Altera só o preço de venda")
+    public ProdutoResponse alterarPreco(@PathVariable Long id, @Valid @RequestBody PrecoRequest req) {
+        return ProdutoResponse.de(service.alterarPreco(id, req.precoVenda()));
     }
 
     @PatchMapping("/{id}/ativo")

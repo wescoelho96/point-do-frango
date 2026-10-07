@@ -116,6 +116,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/api/v1/loja", "/api/v1/loja/**").hasRole(ADMIN)
                         .requestMatchers(HttpMethod.POST, "/api/v1/bairros/**", "/api/v1/colaboradores/**").hasRole(ADMIN)
                         .requestMatchers(HttpMethod.PUT, "/api/v1/bairros/**", "/api/v1/colaboradores/**").hasRole(ADMIN)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/insumos/reposicao").hasRole(ADMIN)
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/insumos/**").hasRole(ADMIN)
                         .requestMatchers(HttpMethod.POST, "/api/v1/insumos/**", "/api/v1/produtos/**").hasRole(ADMIN)
                         .requestMatchers(HttpMethod.PUT, "/api/v1/insumos/**", "/api/v1/produtos/**").hasRole(ADMIN)
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/insumos/**", "/api/v1/produtos/**").hasRole(ADMIN)

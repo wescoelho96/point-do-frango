@@ -287,6 +287,17 @@ O custo médio do insumo é recalculado com o valor da compra. Pagamento com din
 2. Informe a **Quantidade contada** e o **Motivo** (por exemplo, "Inventário semanal").
 3. Clique em **Ajustar saldo**. A diferença fica registrada no **Extrato** do insumo.
 
+**Custo, preço de venda e lucro (Editar):**
+
+1. Clique em **Editar** na linha do insumo.
+2. Em **Calcular o custo pelo valor pago**, informe quanto pagou e por quantas unidades (por exemplo, R$ 45,00 por 6). O **Custo por un** é preenchido com o valor de cada unidade (R$ 7,50).
+3. Para itens de revenda, como bebidas, informe o **Preço de venda**. Se o item ainda não está no cardápio, marque **Também vender no cardápio**. O lucro por unidade e a margem aparecem na hora.
+4. Clique em **Salvar**.
+
+**Excluir insumo:** em **Editar**, clique em **Excluir insumo** e confirme. Só pode ser excluído o item que nunca foi vendido nem consumido; o produto de revenda ligado a ele sai do cardápio junto. Item com histórico de vendas deve ser apenas desativado (desmarque **Ativo**).
+
+**Separar para repor:** a coluna **Separar p/ repor** mostra, para cada item, o custo do que foi vendido desde a última compra. É o valor a guardar para comprar o mesmo item de novo. O topo da tela mostra o total. Ao registrar uma nova **Entrada** do item, o valor volta a zero.
+
 Outros botões da linha: **Editar** (dados, embalagens, mínimo, ativo), o botão de duplicar (cria um insumo parecido, como outro sabor ou tamanho), **Rende** (quantas porções o saldo permite fazer e, para o dono, o lucro por kg ou unidade) e **Extrato** (histórico de movimentações). Novos insumos são criados em **+ Novo insumo**.
 
 ![Lucro por kg](img/margem-por-kg.png)

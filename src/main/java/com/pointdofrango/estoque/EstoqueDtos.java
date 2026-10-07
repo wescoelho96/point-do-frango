@@ -90,6 +90,10 @@ public final class EstoqueDtos {
         }
     }
 
+    /** Custo do que foi vendido desde a última compra: o dinheiro a guardar para repor o mesmo item. */
+    public record ReposicaoResponse(Long insumoId, BigDecimal vendido, BigDecimal valor) {
+    }
+
     public record InsumoResponse(Long id, String nome, UnidadeMedida unidade, String sigla, String subunidade,
                                  BigDecimal estoqueAtual, BigDecimal estoqueMinimo, BigDecimal custoUnitario,
                                  BigDecimal valorEmEstoque, boolean abaixoDoMinimo, boolean ativo,

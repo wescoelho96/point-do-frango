@@ -3,6 +3,7 @@ package com.pointdofrango.produto;
 import com.pointdofrango.estoque.EmbalagemCompra;
 import com.pointdofrango.estoque.Insumo;
 import com.pointdofrango.estoque.InsumoConversaoAlterada;
+import com.pointdofrango.estoque.InsumoExcluido;
 import com.pointdofrango.estoque.InsumoRepository;
 import com.pointdofrango.estoque.ModoQuantidade;
 import com.pointdofrango.produto.ProdutoDtos.ItemFichaRequest;
@@ -14,6 +15,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -69,6 +71,13 @@ public class ProdutoService {
     }
 
     @Transactional
+    public Produto alterarPreco(Long id, BigDecimal precoVenda) {
+        Produto produto = buscar(id);
+        produto.atualizarCadastro(produto.getNome(), produto.getDescricao(), produto.getCategoria(), precoVenda);
+        return produto;
+    }
+
+    @Transactional
     public void alterarAtivo(Long id, boolean ativo) {
         Produto produto = buscar(id);
         if (ativo) {
@@ -89,6 +98,25 @@ public class ProdutoService {
      * Roda na transação de quem publicou: se uma ficha ficar inválida (ex.: removeram a
      * embalagem usada no rendimento), a alteração do insumo é desfeita.
      */
+    /**
+     * Item de revenda (ficha só com este insumo) que nunca foi vendido sai junto com o insumo.
+     * Prato que usa o insumo junto com outros, ou produto com histórico, bloqueia a exclusão.
+     */
+    @EventListener
+    @Transactional
+    public void aoExcluirInsumo(InsumoExcluido evento) {
+        List<Produto> usam = fichas.findByInsumoIdOrderByProdutoNomeAsc(evento.insumoId()).stream()
+                .map(ItemFichaTecnica::getProduto).distinct().toList();
+        List<String> bloqueiam = usam.stream()
+                .filter(p -> p.getFichaTecnica().size() > 1 || produtos.temHistorico(p.getId()))
+                .map(Produto::getNome).toList();
+        if (!bloqueiam.isEmpty()) {
+            throw new RegraDeNegocioException(evento.nome() + " é usado em " + String.join(", ", bloqueiam)
+                    + ". Para tirar da lista, desmarque \"Ativo\".");
+        }
+        produtos.deleteAll(usam);
+    }
+
     @EventListener
     @Transactional
     public void aoAlterarInsumo(InsumoConversaoAlterada evento) {

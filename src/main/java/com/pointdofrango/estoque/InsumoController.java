@@ -5,11 +5,13 @@ import com.pointdofrango.estoque.EstoqueDtos.EntradaRequest;
 import com.pointdofrango.estoque.EstoqueDtos.InsumoRequest;
 import com.pointdofrango.estoque.EstoqueDtos.InsumoResponse;
 import com.pointdofrango.estoque.EstoqueDtos.MovimentacaoResponse;
+import com.pointdofrango.estoque.EstoqueDtos.ReposicaoResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -38,6 +40,19 @@ public class InsumoController {
     public List<InsumoResponse> listar(Authentication auth) {
         boolean admin = admin(auth);
         return service.listar().stream().map(InsumoResponse::de).map(i -> admin ? i : i.semCustos()).toList();
+    }
+
+    @GetMapping("/reposicao")
+    @Operation(summary = "Custo do que foi vendido de cada insumo desde a última compra (valor a separar para repor)")
+    public List<ReposicaoResponse> reposicao() {
+        return service.reposicao();
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Exclui insumo sem vendas nem consumo; com histórico, use a desativação")
+    public void excluir(@PathVariable Long id) {
+        service.excluir(id);
     }
 
     @GetMapping("/{id}")

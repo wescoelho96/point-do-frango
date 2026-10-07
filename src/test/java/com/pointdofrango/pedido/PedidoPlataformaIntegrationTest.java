@@ -87,14 +87,14 @@ class PedidoPlataformaIntegrationTest {
     @Test
     @DisplayName("Lançamento no fim do dia: já nasce entregue, com a hora real, e não aparece na cozinha")
     void lancamentoPosterior() {
-        LocalDateTime meioDia = LocalDate.now(zona).atTime(12, 0);
-        var req = new PedidoPlataformaRequest(CanalVenda.NOVENTA_NOVE_FOOD, "99-" + n, meioDia, "Ana", null,
+        LocalDateTime horaReal = LocalDateTime.now(zona).minusMinutes(30).withSecond(0).withNano(0);
+        var req = new PedidoPlataformaRequest(CanalVenda.NOVENTA_NOVE_FOOD, "99-" + n, horaReal, "Ana", null,
                 List.of(new ItemRequest(porcao.getId(), 1)), bd("40.00"), null, bd("0"), false);
 
         Pedido p = pedidos.lancarDePlataforma(req, "dono");
 
         assertThat(p.getStatus()).isEqualTo(StatusPedido.ENTREGUE);
-        assertThat(p.getCriadoEm()).isEqualTo(meioDia.atZone(zona).toInstant());
+        assertThat(p.getCriadoEm()).isEqualTo(horaReal.atZone(zona).toInstant());
         assertThat(pedidos.filaDaCozinha()).extracting(Pedido::getId).doesNotContain(p.getId());
     }
 

@@ -18,6 +18,14 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
 
     boolean existsByNomeIgnoreCase(String nome);
 
+    /** Vendido em algum pedido ou usado em promoção. */
+    @Query(value = """
+            select case when exists (select 1 from pedido_item where produto_id = :id)
+                          or exists (select 1 from promocao where produto_compra_id = :id or produto_brinde_id = :id)
+                   then true else false end
+            """, nativeQuery = true)
+    boolean temHistorico(Long id);
+
     boolean existsByNomeIgnoreCaseAndIdNot(String nome, Long id);
 
     /**
