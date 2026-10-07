@@ -75,14 +75,17 @@ public final class LeitorNfe {
             Element prod = primeiro(det, "prod");
             BigDecimal bruto = numero(prod, "vProd");
             BigDecimal desconto = numeroOuZero(prod, "vDesc");
-            itens.add(new Item(Integer.parseInt(det.getAttribute("nItem")), texto(prod, "cProd"), texto(prod, "cEAN"),
+            itens.add(new Item(numeroDoItem(det, i + 1), texto(prod, "cProd"), texto(prod, "cEAN"),
                     texto(prod, "xProd"), texto(prod, "NCM"), texto(prod, "uCom"), numero(prod, "qCom"),
                     numero(prod, "vUnCom"), bruto.subtract(desconto)));
         }
         if (itens.isEmpty()) {
             throw new RegraDeNegocioException("A nota não tem itens.");
         }
-        String emitenteNome = texto(emit, "xFant") != null ? texto(emit, "xFant") : texto(emit, "xNome");
+        // Redes costumam usar o código da filial como nome fantasia ("337 BARUERI"): aí a razão social diz mais.
+        String fantasia = texto(emit, "xFant");
+        String emitenteNome = fantasia != null && !fantasia.isBlank() && !Character.isDigit(fantasia.charAt(0))
+                ? fantasia : texto(emit, "xNome");
         return new Nota(chave, texto(ide, "nNF"), texto(ide, "serie"), texto(emit, "CNPJ"), emitenteNome,
                 dest != null ? texto(dest, "CNPJ") : null, OffsetDateTime.parse(texto(ide, "dhEmi")),
                 numero(primeiro(primeiro(inf, "total"), "ICMSTot"), "vNF"), itens);
@@ -126,6 +129,12 @@ public final class LeitorNfe {
         NodeList lista = pai instanceof Document d ? d.getElementsByTagNameNS(NS, nome)
                 : ((Element) pai).getElementsByTagNameNS(NS, nome);
         return lista.getLength() == 0 ? null : (Element) lista.item(0);
+    }
+
+    /** Padrão da SEFAZ é o atributo nItem; XMLs regravados por portais de consulta trazem como elemento. */
+    private static int numeroDoItem(Element det, int posicao) {
+        String n = det.hasAttribute("nItem") ? det.getAttribute("nItem") : texto(det, "nItem");
+        return n != null && n.strip().matches("\\d{1,3}") ? Integer.parseInt(n.strip()) : posicao;
     }
 
     private static String texto(Element pai, String nome) {

@@ -23,16 +23,60 @@ function palpiteFator(item, insumo) {
   return m ? Number(m[1]) : 1;
 }
 
+const NOVO = 'novo';
+const UNIDADES = {
+  kg: { unidade: 'QUILOGRAMA', sigla: 'kg' },
+  L: { unidade: 'LITRO', sigla: 'L' },
+  un: { unidade: 'UNIDADE', sigla: 'un' },
+};
+
+/** Item sem insumo cadastrado: unidade e conversão a partir da unidade e da descrição da nota ("2KG", "900ML"). */
+function palpiteNovo(item) {
+  if (/^KG/i.test(item.unidade)) return { ...UNIDADES.kg, fator: 1 };
+  const m = /(\d+(?:[.,]\d+)?)\s*(KG|G|LT|L|ML)\b/i.exec(item.descricao);
+  if (m) {
+    const valor = Number(m[1].replace(',', '.'));
+    const tipo = m[2].toUpperCase();
+    if (tipo === 'KG') return { ...UNIDADES.kg, fator: valor };
+    if (tipo === 'G') return { ...UNIDADES.kg, fator: valor / 1000 };
+    if (tipo === 'ML') return { ...UNIDADES.L, fator: valor / 1000 };
+    return { ...UNIDADES.L, fator: valor };
+  }
+  return { ...UNIDADES.un, fator: palpiteFator(item, UNIDADES.un) };
+}
+
+/** Conversão sugerida para um insumo existente: "2KG" vale para insumo em kg, "C/6" para insumo em unidades. */
+function fatorPara(item, insumo) {
+  const daNota = palpiteNovo(item);
+  return daNota.sigla === insumo.sigla && daNota.sigla !== 'un' ? daNota.fator : palpiteFator(item, insumo);
+}
+
+function nomeDoItem(descricao) {
+  return descricao.toLowerCase().replace(/(^|\s)\S/g, (l) => l.toUpperCase()).slice(0, 100);
+}
+
+/** Reaproveita o insumo de mesmo nome, se já existir; o custo vem da própria entrada da nota. */
+async function criarInsumo(item, insumos) {
+  const nome = nomeDoItem(item.descricao);
+  const existente = insumos.find((i) => semAcento(i.nome) === semAcento(nome));
+  if (existente) return existente.id;
+  const { unidade } = palpiteNovo(item);
+  const criado = await api.post('/insumos', { nome, unidade, estoqueMinimo: 0, custoUnitario: 0, estoqueInicial: 0 });
+  insumos.push(criado);
+  return criado.id;
+}
+
 function linhaItem(previa, insumos) {
   return previa.itens.map(({ item, insumoSugerido, fatorSugerido }) => {
     const insumo = insumos.find((i) => i.id === insumoSugerido) ?? palpiteInsumo(item.descricao, insumos);
-    const fator = fatorSugerido ?? palpiteFator(item, insumo);
+    const fator = fatorSugerido ?? (insumo ? fatorPara(item, insumo) : palpiteNovo(item).fator);
     return html`
       <tr data-item="${item.numero}">
         <td>${item.descricao}<div class="muted" style="font-size:.78rem">${numero(item.quantidade)} ${item.unidade} · ${moeda(item.valor)}
           ${insumoSugerido ? html` · <span class="badge badge-good">lembrado da última compra</span>` : ''}</div></td>
         <td><select name="insumo-${item.numero}" aria-label="Insumo do item ${item.numero}">
           <option value="">— não é estoque (ignorar) —</option>
+          <option value="${NOVO}" ${insumo ? '' : 'selected'}>+ Cadastrar como novo insumo</option>
           ${insumos.filter((i) => i.ativo).map((i) => html`<option value="${i.id}" ${insumo?.id === i.id ? 'selected' : ''}>${i.nome}</option>`)}
         </select></td>
         <td style="width:120px"><input name="fator-${item.numero}" inputmode="decimal" value="${String(fator).replace('.', ',')}"
@@ -76,10 +120,23 @@ export function abrirImportacao(insumos, aoImportar) {
       const mostrar = (conteudo) => { info.innerHTML = String(conteudo); };
 
       const atualizarEntradas = () => previa?.itens.forEach(({ item }) => {
-        const insumo = insumos.find((i) => i.id === Number(form[`insumo-${item.numero}`].value));
+        const escolha = form[`insumo-${item.numero}`].value;
+        const insumo = escolha === NOVO ? palpiteNovo(item) : insumos.find((i) => i.id === Number(escolha));
         const fator = decimal(form[`fator-${item.numero}`].value) || 0;
-        form.querySelector(`[data-entra="${item.numero}"]`).textContent = insumo
-          ? `entra ${numero(item.quantidade * fator)} ${insumo.sigla}` : 'ignorado';
+        const entra = form.querySelector(`[data-entra="${item.numero}"]`);
+        if (!insumo) { entra.textContent = 'ignorado'; return; }
+        entra.textContent = `${escolha === NOVO ? 'novo · ' : ''}entra ${numero(item.quantidade * fator)} ${insumo.sigla}`;
+      });
+
+      // Ao trocar o insumo, a conversão sugerida acompanha a unidade dele.
+      form.addEventListener('change', (ev) => {
+        const numeroItem = /^insumo-(\d+)$/.exec(ev.target.name ?? '')?.[1];
+        const linha = numeroItem && previa?.itens.find(({ item }) => String(item.numero) === numeroItem);
+        if (!linha) return;
+        const escolha = ev.target.value;
+        const existente = insumos.find((i) => i.id === Number(escolha));
+        const fator = escolha === NOVO ? palpiteNovo(linha.item).fator : existente ? fatorPara(linha.item, existente) : 1;
+        form[`fator-${numeroItem}`].value = String(fator).replace('.', ',');
       });
 
       form.chave.addEventListener('input', async () => {
@@ -127,11 +184,14 @@ export function abrirImportacao(insumos, aoImportar) {
         throw new Error('A chave só confere a nota. Para dar entrada nos itens, escolha também o arquivo XML da nota.');
       }
       if (previa.jaImportada) throw new Error('Esta nota já foi importada.');
-      const itens = previa.itens.map(({ item }) => ({
-        numero: item.numero,
-        insumoId: d[`insumo-${item.numero}`] ? Number(d[`insumo-${item.numero}`]) : null,
-        fator: decimal(d[`fator-${item.numero}`]),
-      }));
+      const itens = [];
+      for (const { item } of previa.itens) {
+        let insumoId = d[`insumo-${item.numero}`] ? Number(d[`insumo-${item.numero}`]) : null;
+        if (d[`insumo-${item.numero}`] === NOVO) {
+          insumoId = await criarInsumo(item, insumos);
+        }
+        itens.push({ numero: item.numero, insumoId, fator: decimal(d[`fator-${item.numero}`]) });
+      }
       const pagamento = d.pagamento === 'NAO' ? null
         : { forma: d.pagamento === 'CAIXA' ? 'DINHEIRO' : d.pagamento, doCaixa: d.pagamento === 'CAIXA' };
       const r = await api.post('/notas/importar', { xml, itens, pagamento });

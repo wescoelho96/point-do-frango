@@ -38,6 +38,16 @@ class LeitorNfeTest {
     }
 
     @Test
+    @DisplayName("XML regravado por portal de consulta: nItem como elemento")
+    void nItemComoElemento() throws IOException {
+        String xml = xmlDeExemplo().replaceAll("<det nItem=\"(\\d+)\">", "<det><nItem>$1</nItem>");
+
+        var nota = LeitorNfe.ler(xml);
+
+        assertThat(nota.itens()).extracting(LeitorNfe.Item::numero).containsExactly(1, 2, 3);
+    }
+
+    @Test
     @DisplayName("Chave da DANFE: CNPJ, número e mês; dígito errado é recusado")
     void chave() {
         var c = LeitorNfe.lerChave("3526 1011 2223 3300 0181 5500 1000 0123 4511 2345 6784");
