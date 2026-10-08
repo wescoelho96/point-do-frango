@@ -5,6 +5,7 @@ import com.pointdofrango.shared.Dinheiro;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -76,6 +77,24 @@ public final class EstoqueDtos {
      * do caixa aberto; senão foi pago por fora (PIX, cartão).
      */
     public record PagamentoCompra(@NotNull FormaPagamento forma, boolean doCaixa, Long fornecedorId) {
+    }
+
+    /** Compra com vários itens e um só pagamento (cupom de mercado, compra sem nota). */
+    public record CompraRequest(
+            @NotEmpty @Size(max = 60) List<@Valid ItemCompra> itens,
+            @Size(max = 255) String observacao,
+            @Valid PagamentoCompra pagamento) {
+    }
+
+    public record ItemCompra(
+            @NotNull Long insumoId,
+            @DecimalMin(value = "0", inclusive = false) BigDecimal quantidade,
+            Long embalagemId,
+            @DecimalMin(value = "0", inclusive = false) BigDecimal quantidadeEmbalagens,
+            @NotNull @DecimalMin("0") BigDecimal valorTotal) {
+    }
+
+    public record CompraResponse(int itens, BigDecimal valorTotal) {
     }
 
     public record AjusteRequest(

@@ -69,10 +69,13 @@ class LeitorNfeTest {
     }
 
     @Test
-    @DisplayName("Cupom de consumidor (NFC-e, modelo 65) não é aceito")
+    @DisplayName("Cupom NFC-e (modelo 65) é lido como a NF-e; outros modelos são recusados")
     void nfce() throws IOException {
         String nfce = xmlDeExemplo().replace("<mod>55</mod>", "<mod>65</mod>");
-        assertThatThrownBy(() -> LeitorNfe.ler(nfce)).isInstanceOf(RegraDeNegocioException.class)
-                .hasMessageContaining("modelo 55");
+        assertThat(LeitorNfe.ler(nfce).itens()).hasSize(3);
+
+        String outro = xmlDeExemplo().replace("<mod>55</mod>", "<mod>59</mod>");
+        assertThatThrownBy(() -> LeitorNfe.ler(outro)).isInstanceOf(RegraDeNegocioException.class)
+                .hasMessageContaining("modelo 65");
     }
 }

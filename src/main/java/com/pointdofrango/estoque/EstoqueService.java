@@ -1,6 +1,9 @@
 package com.pointdofrango.estoque;
 
 import com.pointdofrango.estoque.EstoqueDtos.AjusteRequest;
+import com.pointdofrango.estoque.EstoqueDtos.CompraRequest;
+import com.pointdofrango.estoque.EstoqueDtos.CompraResponse;
+import com.pointdofrango.estoque.EstoqueDtos.ItemCompra;
 import com.pointdofrango.estoque.EstoqueDtos.EntradaRequest;
 import com.pointdofrango.estoque.EstoqueDtos.InsumoRequest;
 import com.pointdofrango.estoque.EstoqueDtos.ReposicaoResponse;
@@ -16,6 +19,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -120,6 +124,25 @@ public class EstoqueService {
                         Dinheiro.centavos(((BigDecimal) l[2]).negate())))
                 .filter(r -> r.vendido().signum() > 0)
                 .toList();
+    }
+
+    /** Uma entrada por item (custo médio de cada um) e um único lançamento do pagamento pelo total. */
+    @Transactional
+    public CompraResponse registrarCompra(CompraRequest req, String usuario) {
+        String observacao = req.observacao() == null || req.observacao().isBlank() ? "Compra sem nota" : req.observacao().trim();
+        BigDecimal total = BigDecimal.ZERO;
+        // Mesma ordem de travamento em todas as compras, para não haver deadlock.
+        List<ItemCompra> itens = req.itens().stream().sorted(Comparator.comparing(ItemCompra::insumoId)).toList();
+        for (ItemCompra item : itens) {
+            registrarEntrada(item.insumoId(), new EntradaRequest(item.quantidade(), item.embalagemId(),
+                    item.quantidadeEmbalagens(), item.valorTotal(), observacao), usuario);
+            total = total.add(item.valorTotal());
+        }
+        if (req.pagamento() != null && total.signum() > 0) {
+            eventos.publishEvent(new CompraDeInsumoPaga(observacao + " (" + itens.size() + " itens)", total,
+                    req.pagamento(), usuario));
+        }
+        return new CompraResponse(itens.size(), Dinheiro.centavos(total));
     }
 
     @Transactional

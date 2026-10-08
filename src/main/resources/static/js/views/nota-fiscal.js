@@ -95,8 +95,9 @@ export function abrirImportacao(insumos, aoImportar) {
     largo: true,
     textoSalvar: 'Dar entrada no estoque',
     corpo: html`
-      <p class="text-2" style="margin:0">Os itens vêm do <strong>arquivo XML</strong> da nota: ele chega no e-mail do CNPJ informado no caixa
-        e também pode ser baixado no portal da nota fiscal. Só com o número da DANFE dá para conferir a nota, mas não ler os itens.</p>
+      <p class="text-2" style="margin:0">Os itens vêm do <strong>arquivo XML</strong> da nota (NF-e) ou do cupom (NFC-e): ele chega no e-mail
+        do CNPJ informado no caixa e também pode ser baixado no portal da nota fiscal. Só com o número da DANFE dá para conferir a nota,
+        mas não ler os itens. Sem XML, use <strong>Compra sem nota (cupom)</strong>.</p>
       <div class="form-grid">
         <label class="field" style="grid-column:1/-1">Chave de acesso da DANFE (44 números, opcional)
           <input name="chave" inputmode="numeric" autocomplete="off" placeholder="3526 1011 2223 ..."></label>

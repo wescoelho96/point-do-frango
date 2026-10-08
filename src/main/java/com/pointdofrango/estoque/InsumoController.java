@@ -1,6 +1,8 @@
 package com.pointdofrango.estoque;
 
 import com.pointdofrango.estoque.EstoqueDtos.AjusteRequest;
+import com.pointdofrango.estoque.EstoqueDtos.CompraRequest;
+import com.pointdofrango.estoque.EstoqueDtos.CompraResponse;
 import com.pointdofrango.estoque.EstoqueDtos.EntradaRequest;
 import com.pointdofrango.estoque.EstoqueDtos.InsumoRequest;
 import com.pointdofrango.estoque.EstoqueDtos.InsumoResponse;
@@ -76,6 +78,12 @@ public class InsumoController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void alterarAtivo(@PathVariable Long id, @RequestParam boolean valor) {
         service.alterarAtivo(id, valor);
+    }
+
+    @PostMapping("/compras")
+    @Operation(summary = "Compra com vários itens (cupom, compra sem nota): entrada de cada um e um só pagamento")
+    public CompraResponse compra(@Valid @RequestBody CompraRequest req, Authentication auth) {
+        return service.registrarCompra(req, auth.getName());
     }
 
     @PostMapping("/{id}/entradas")

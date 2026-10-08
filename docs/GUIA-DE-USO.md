@@ -315,6 +315,17 @@ Outros botões da linha: **Editar** (dados, embalagens, mínimo, ativo), o botã
 
 O sistema lembra as escolhas para a próxima nota do mesmo fornecedor.
 
+### Compra sem nota (cupom)
+
+Para compras com cupom do caixa, sem o XML da nota:
+
+1. Em **Estoque**, clique em **Compra sem nota (cupom)**.
+2. Em cada linha, escolha o insumo, **Como chegou** (embalagem cadastrada ou avulso), a quantidade e o valor pago no item. Use **+ Item** para mais linhas.
+3. Preencha **Onde comprou** (por exemplo, "Cupom Assaí 08/10"), **Como foi pago** e o fornecedor.
+4. Clique em **Dar entrada no estoque**.
+
+Cada insumo recebe a entrada com o próprio custo médio recalculado, e o total da compra entra uma única vez nas saídas. Se tiver o XML do cupom (NFC-e), ele também pode ser importado em **Importar nota fiscal**.
+
 ### Consumo da equipe
 
 Usado para retirar do estoque o que a equipe comeu ou bebeu, sem registrar venda. Também disponível para o Atendente.

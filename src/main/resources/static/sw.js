@@ -2,7 +2,7 @@
 // ninguém fica preso numa versão antiga.
 // /api/* nunca passa pelo cache: pedido e financeiro têm que vir sempre atualizados e não
 // devem ficar salvos no aparelho.
-const VERSAO = 'pdf-v17';
+const VERSAO = 'pdf-v18';
 const ESSENCIAIS = [
   '/', '/index.html', '/offline.html', '/manifest.webmanifest', '/icons/favicon-64.png', '/img/logo.jpg',
   '/css/app.css', '/icons/icon-192.png', '/icons/icon-512.png',

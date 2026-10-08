@@ -103,6 +103,7 @@ export async function montar(container) {
           <button class="btn" data-acao="consumo">🍽️ Consumo da equipe</button>
           ${admin ? html`<button class="btn" data-acao="cortesias">🎁 Cortesias</button>
             <button class="btn" data-acao="nota">🧾 Importar nota fiscal</button>
+            <button class="btn" data-acao="compra">🛒 Compra sem nota (cupom)</button>
             <button class="btn btn-primary" data-acao="novo">+ Novo insumo</button>` : ''}
         </div>
       </div>
@@ -499,6 +500,103 @@ export async function montar(container) {
   container.addEventListener('input', aoFiltrar);
   container.addEventListener('change', aoFiltrar);
 
+  function linhaCompra() {
+    return html`
+      <div class="ficha-linha" data-item-compra style="grid-template-columns:2fr 1.4fr 90px 110px 32px">
+        <select name="cInsumo" aria-label="Insumo">
+          <option value="">Escolha o insumo…</option>
+          ${grupos().map((g) => html`<optgroup label="${g}">${insumos.filter((i) => i.ativo && (i.grupo || SEM_GRUPO) === g)
+            .map((i) => html`<option value="${i.id}">${i.nome}</option>`)}</optgroup>`)}
+        </select>
+        <select name="cForma" aria-label="Como chegou"><option value="">Avulso</option></select>
+        <input name="cQtd" inputmode="decimal" placeholder="Qtd" aria-label="Quantidade">
+        <input name="cValor" inputmode="decimal" placeholder="R$ total" aria-label="Valor pago neste item">
+        <button type="button" class="btn btn-icon" data-remover-item aria-label="Remover item">✕</button>
+      </div>`;
+  }
+
+  /** Cupom de mercado ou compra sem nota: vários itens, uma entrada para cada, um só pagamento. */
+  function abrirCompra() {
+    modal({
+      titulo: 'Compra sem nota (cupom)',
+      largo: true,
+      textoSalvar: 'Dar entrada no estoque',
+      corpo: html`
+        <p class="text-2" style="margin:0">Lance cada item do cupom com a quantidade e o valor pago nele.
+          O custo médio de cada insumo é recalculado e o total entra uma vez só nas saídas.</p>
+        <div class="muted" style="font-size:.8rem;display:grid;grid-template-columns:2fr 1.4fr 90px 110px 32px;gap:8px">
+          <span>Insumo</span><span>Como chegou</span><span>Quantidade</span><span>Valor (R$)</span><span></span></div>
+        <div class="stack" data-itens-compra>${[1, 2, 3].map(() => linhaCompra())}</div>
+        <div class="row" style="justify-content:space-between">
+          <button type="button" class="btn btn-sm" data-add-item>+ Item</button>
+          <strong data-total-compra>Total: ${moeda(0)}</strong>
+        </div>
+        <div class="form-grid">
+          <label class="field">Onde comprou<input name="observacao" maxlength="200" placeholder="Ex.: Cupom Assaí 08/10"></label>
+          <label class="field">Como foi pago
+            <select name="pagamento">
+              <option value="PIX">PIX / conta (por fora do caixa)</option>
+              <option value="CAIXA">Dinheiro da gaveta (caixa aberto)</option>
+              <option value="DEBITO">Débito</option>
+              <option value="CREDITO">Crédito</option>
+              <option value="NAO">Não lançar nas saídas</option>
+            </select></label>
+          <label class="field">Fornecedor / mercado
+            <select name="fornecedorId"><option value="">—</option>
+              ${fornecedores.filter((f) => f.ativo).map((f) => html`<option value="${f.id}">${f.nome}</option>`)}</select></label>
+        </div>`,
+      aoAbrir: (form) => {
+        const lista = form.querySelector('[data-itens-compra]');
+        const totalEl = form.querySelector('[data-total-compra]');
+        const atualizarTotal = () => {
+          const total = [...lista.querySelectorAll('[name=cValor]')].reduce((s, el) => s + (decimal(el.value) || 0), 0);
+          totalEl.textContent = `Total: ${moeda(total)}`;
+        };
+        form.querySelector('[data-add-item]').addEventListener('click', () => {
+          lista.insertAdjacentHTML('beforeend', String(linhaCompra()));
+          lista.lastElementChild.querySelector('[name=cInsumo]').focus();
+        });
+        lista.addEventListener('click', (ev) => {
+          if (ev.target.closest('[data-remover-item]')) { ev.target.closest('[data-item-compra]').remove(); atualizarTotal(); }
+        });
+        lista.addEventListener('change', (ev) => {
+          if (ev.target.name !== 'cInsumo') return;
+          const i = insumo(ev.target.value);
+          const forma = ev.target.closest('[data-item-compra]').querySelector('[name=cForma]');
+          forma.innerHTML = String(html`${(i?.embalagens ?? []).map((e) => html`<option value="${e.id}">${e.nome}</option>`)}
+            <option value="">${i ? `Avulso, em ${i.sigla}` : 'Avulso'}</option>`);
+        });
+        lista.addEventListener('input', atualizarTotal);
+      },
+      aoSalvar: async (d, form) => {
+        const itens = [...form.querySelectorAll('[data-item-compra]')]
+          .filter((l) => l.querySelector('[name=cInsumo]').value)
+          .map((l) => {
+            const nome = l.querySelector('[name=cInsumo]').selectedOptions[0].textContent;
+            const quantidade = decimal(l.querySelector('[name=cQtd]').value);
+            const valorTotal = decimal(l.querySelector('[name=cValor]').value);
+            if (!quantidade || valorTotal == null) throw new Error(`Informe a quantidade e o valor de ${nome}.`);
+            const embalagemId = l.querySelector('[name=cForma]').value ? Number(l.querySelector('[name=cForma]').value) : null;
+            return embalagemId
+              ? { insumoId: Number(l.querySelector('[name=cInsumo]').value), embalagemId, quantidadeEmbalagens: quantidade, valorTotal }
+              : { insumoId: Number(l.querySelector('[name=cInsumo]').value), quantidade, valorTotal };
+          });
+        if (!itens.length) throw new Error('Escolha pelo menos um insumo.');
+        const r = await api.post('/insumos/compras', {
+          itens,
+          observacao: d.observacao,
+          pagamento: d.pagamento === 'NAO' ? null : {
+            forma: d.pagamento === 'CAIXA' ? 'DINHEIRO' : d.pagamento,
+            doCaixa: d.pagamento === 'CAIXA',
+            fornecedorId: d.fornecedorId ? Number(d.fornecedorId) : null,
+          },
+        });
+        toast(`Compra lançada: ${r.itens} item(ns) · ${moeda(r.valorTotal)}`);
+        await carregar();
+      },
+    });
+  }
+
   function confirmarExclusao(i) {
     const juntos = soDesteInsumo(i).map((p) => p.nome).join(', ');
     modal({
@@ -523,6 +621,7 @@ export async function montar(container) {
     },
     consumo: () => abrirConsumo(),
     nota: () => abrirImportacao(insumos, carregar),
+    compra: () => abrirCompra(),
     cortesias: () => abrirCortesias().catch(toastErro),
     'historico-consumo': () => abrirHistoricoConsumo().catch(toastErro),
     editar: (el) => {

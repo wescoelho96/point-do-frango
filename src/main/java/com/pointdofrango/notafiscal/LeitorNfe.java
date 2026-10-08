@@ -65,8 +65,10 @@ public final class LeitorNfe {
         Element ide = primeiro(inf, "ide");
         Element emit = primeiro(inf, "emit");
         Element dest = primeiro(inf, "dest");
-        if (!"55".equals(texto(ide, "mod"))) {
-            throw new RegraDeNegocioException("Só NF-e (modelo 55) é aceita aqui. Cupom de consumidor (NFC-e) não traz o CNPJ da loja.");
+        // 55 = NF-e; 65 = NFC-e, o cupom do caixa do mercado (em geral sem destinatário).
+        String modelo = texto(ide, "mod");
+        if (!"55".equals(modelo) && !"65".equals(modelo)) {
+            throw new RegraDeNegocioException("Só NF-e (modelo 55) ou cupom NFC-e (modelo 65) podem ser importados.");
         }
         List<Item> itens = new ArrayList<>();
         NodeList dets = inf.getElementsByTagNameNS(NS, "det");

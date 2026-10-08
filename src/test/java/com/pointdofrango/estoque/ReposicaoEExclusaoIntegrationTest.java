@@ -89,6 +89,24 @@ class ReposicaoEExclusaoIntegrationTest {
         assertThat(estoque.buscar(caixa.getId())).isNotNull();
     }
 
+    @Test
+    @DisplayName("Compra sem nota: entrada de cada item com o próprio custo médio e um total único")
+    void compraComVariosItens() {
+        Insumo oleo = insumo("Oleo", "8", "10");
+        Insumo sal = insumo("Sal", "2", "0");
+
+        var r = estoque.registrarCompra(new EstoqueDtos.CompraRequest(List.of(
+                new EstoqueDtos.ItemCompra(oleo.getId(), bd("10"), null, null, bd("100")),
+                new EstoqueDtos.ItemCompra(sal.getId(), bd("5"), null, null, bd("15"))), "Cupom mercado", null), "teste");
+
+        assertThat(r.itens()).isEqualTo(2);
+        assertThat(r.valorTotal()).isEqualByComparingTo("115.00");
+        Insumo oleoDepois = estoque.buscar(oleo.getId());
+        assertThat(oleoDepois.getEstoqueAtual()).isEqualByComparingTo("20");
+        assertThat(oleoDepois.getCustoUnitario()).isEqualByComparingTo("9"); // (10 × 8 + 100) / 20
+        assertThat(estoque.buscar(sal.getId()).getCustoUnitario()).isEqualByComparingTo("3");
+    }
+
     private Insumo insumo(String nome, String custo, String estoqueInicial) {
         return estoque.criar(new InsumoRequest("Repor " + nome + " " + SEQ.incrementAndGet(), UnidadeMedida.UNIDADE, bd("0"), bd(custo),
                 bd(estoqueInicial)), "teste");
