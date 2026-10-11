@@ -302,18 +302,20 @@ Outros botões da linha: **Editar** (dados, embalagens, mínimo, ativo), o botã
 
 ![Lucro por kg](img/margem-por-kg.png)
 
-### Importar nota fiscal (NF-e)
+### Importar nota fiscal ou cupom
 
-1. Em **Estoque**, clique em **Importar nota fiscal**.
-2. Opcionalmente, digite a **Chave de acesso da DANFE** (44 números) para conferir se a nota já foi importada.
-3. Em **Arquivo XML da nota**, escolha o XML recebido por e-mail ou baixado no portal da nota fiscal.
-4. Confira os dados da nota e os avisos: nota já importada, nota emitida para outro CNPJ ou XML diferente da chave digitada.
-5. Para cada item, escolha o **Insumo do estoque** correspondente ou "não é estoque (ignorar)".
+1. Em **Estoque**, clique em **Importar nota ou cupom**.
+2. Escolha a origem da compra:
+   - **Cupom com QR Code (NFC-e):** em **Foto do QR Code do cupom**, fotografe o QR Code (no celular, a câmera abre direto). Os itens são buscados na SEFAZ. Também é possível colar o link do QR Code.
+   - **Nota fiscal (NF-e):** em **Arquivo XML da nota ou do cupom**, escolha o XML recebido por e-mail ou baixado no portal da nota fiscal.
+3. Opcionalmente, digite a **Chave de acesso da DANFE** (44 números) para conferir se a nota já foi importada.
+4. Confira os dados e os avisos: compra já importada, nota emitida para outro CNPJ ou compra diferente da chave digitada.
+5. Para cada item, escolha o **Insumo do estoque** correspondente, **+ Cadastrar como novo insumo** ou "não é estoque (ignorar)".
 6. Ajuste **Unid. em cada**: um fardo com 6 unidades = 6; produto vendido por kg = 1.
 7. Escolha **Como foi pago**. Se o pagamento já foi lançado, use **Já lancei o pagamento (não lançar de novo)**.
 8. Clique em **Dar entrada no estoque**.
 
-O sistema lembra as escolhas para a próxima nota do mesmo fornecedor.
+O sistema lembra as escolhas para a próxima compra do mesmo fornecedor. Para a foto do QR Code, enquadre só o código, de perto, reto e com boa luz.
 
 ### Compra sem nota (cupom)
 
@@ -324,7 +326,7 @@ Para compras com cupom do caixa, sem o XML da nota:
 3. Preencha **Onde comprou** (por exemplo, "Cupom Assaí 08/10"), **Como foi pago** e o fornecedor.
 4. Clique em **Dar entrada no estoque**.
 
-Cada insumo recebe a entrada com o próprio custo médio recalculado, e o total da compra entra uma única vez nas saídas. Se tiver o XML do cupom (NFC-e), ele também pode ser importado em **Importar nota fiscal**.
+Cada insumo recebe a entrada com o próprio custo médio recalculado, e o total da compra entra uma única vez nas saídas. Se o cupom tiver QR Code, prefira **Importar nota ou cupom**: os itens vêm prontos da SEFAZ.
 
 ### Consumo da equipe
 

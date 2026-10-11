@@ -44,7 +44,7 @@ class ImportarNotaIntegrationTest {
         assertThat(previa.jaImportada()).isFalse();
         assertThat(previa.itens()).allSatisfy(i -> assertThat(i.insumoSugerido()).isNull());
 
-        var resultado = notas.importar(xml, List.of(new Ligacao(1, coca.getId(), bd("6")),
+        var resultado = notas.importar(xml, null, List.of(new Ligacao(1, coca.getId(), bd("6")),
                 new Ligacao(2, sassami.getId(), bd("1")), new Ligacao(3, null, null)),
                 new Pagamento(FormaPagamento.PIX, false), "dono");
 
@@ -63,7 +63,7 @@ class ImportarNotaIntegrationTest {
         });
 
         // mesma nota de novo: recusada; e os itens agora já vêm ligados
-        assertThatThrownBy(() -> notas.importar(xml, List.of(new Ligacao(1, coca.getId(), bd("6"))), null, "dono"))
+        assertThatThrownBy(() -> notas.importar(xml, null, List.of(new Ligacao(1, coca.getId(), bd("6"))), null, "dono"))
                 .isInstanceOf(RegraDeNegocioException.class).hasMessageContaining("já foi importada");
         var deNovo = notas.previa(xml);
         assertThat(deNovo.jaImportada()).isTrue();

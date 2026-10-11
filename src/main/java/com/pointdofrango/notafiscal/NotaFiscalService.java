@@ -43,18 +43,20 @@ public class NotaFiscalService {
     private final SaidaService saidas;
     private final CaixaService caixa;
     private final LojaService loja;
+    private final ConsultaNfce consultaNfce;
     private final Clock clock;
     private final ZoneId zona;
 
     public NotaFiscalService(NotaFiscalCompraRepository notas, ItemFornecedorRepository itensFornecedor,
                              EstoqueService estoque, SaidaService saidas, CaixaService caixa, LojaService loja,
-                             Clock clock, ZoneId zona) {
+                             ConsultaNfce consultaNfce, Clock clock, ZoneId zona) {
         this.notas = notas;
         this.itensFornecedor = itensFornecedor;
         this.estoque = estoque;
         this.saidas = saidas;
         this.caixa = caixa;
         this.loja = loja;
+        this.consultaNfce = consultaNfce;
         this.clock = clock;
         this.zona = zona;
     }
@@ -83,7 +85,16 @@ public class NotaFiscalService {
 
     @Transactional(readOnly = true)
     public Previa previa(String xml) {
-        Nota nota = LeitorNfe.ler(xml);
+        return previa(LeitorNfe.ler(xml));
+    }
+
+    /** Cupom NFC-e: os itens vêm da página de consulta do QR Code. */
+    @Transactional(readOnly = true)
+    public Previa previaDoCupom(String enderecoQrCode) {
+        return previa(consultaNfce.ler(enderecoQrCode));
+    }
+
+    private Previa previa(Nota nota) {
         var fornecedor = saidas.fornecedorPorCnpj(nota.emitenteCnpj());
         Map<String, ItemFornecedor> lembrados = fornecedor.map(f -> itensFornecedor.findByFornecedorId(f.getId()).stream()
                         .collect(Collectors.toMap(ItemFornecedor::getCodigoProduto, Function.identity())))
@@ -97,8 +108,9 @@ public class NotaFiscalService {
     }
 
     @Transactional
-    public Resultado importar(String xml, List<Ligacao> ligacoes, Pagamento pagamento, String usuario) {
-        Nota nota = LeitorNfe.ler(xml); // relê no servidor: valores e quantidades não vêm do navegador
+    public Resultado importar(String xml, String enderecoQrCode, List<Ligacao> ligacoes, Pagamento pagamento, String usuario) {
+        // Relê no servidor (XML ou SEFAZ): valores e quantidades não vêm do navegador.
+        Nota nota = xml != null && !xml.isBlank() ? LeitorNfe.ler(xml) : consultaNfce.ler(enderecoQrCode);
         if (notas.existsByChave(nota.chave())) {
             throw new RegraDeNegocioException("A nota nº " + nota.numero() + " de " + nota.emitenteNome() + " já foi importada.");
         }

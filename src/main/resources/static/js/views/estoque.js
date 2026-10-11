@@ -102,7 +102,7 @@ export async function montar(container) {
         <div class="row">
           <button class="btn" data-acao="consumo">🍽️ Consumo da equipe</button>
           ${admin ? html`<button class="btn" data-acao="cortesias">🎁 Cortesias</button>
-            <button class="btn" data-acao="nota">🧾 Importar nota fiscal</button>
+            <button class="btn" data-acao="nota">📷 Importar nota ou cupom</button>
             <button class="btn" data-acao="compra">🛒 Compra sem nota (cupom)</button>
             <button class="btn btn-primary" data-acao="novo">+ Novo insumo</button>` : ''}
         </div>
@@ -522,7 +522,8 @@ export async function montar(container) {
       largo: true,
       textoSalvar: 'Dar entrada no estoque',
       corpo: html`
-        <p class="text-2" style="margin:0">Lance cada item do cupom com a quantidade e o valor pago nele.
+        <p class="text-2" style="margin:0">Cupom com QR Code? Use <strong>Importar nota ou cupom</strong> e fotografe o QR Code.
+          Sem QR Code, lance cada item com a quantidade e o valor pago nele.
           O custo médio de cada insumo é recalculado e o total entra uma vez só nas saídas.</p>
         <div class="muted" style="font-size:.8rem;display:grid;grid-template-columns:2fr 1.4fr 90px 110px 32px;gap:8px">
           <span>Insumo</span><span>Como chegou</span><span>Quantidade</span><span>Valor (R$)</span><span></span></div>

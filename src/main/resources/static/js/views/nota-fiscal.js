@@ -86,23 +86,63 @@ function linhaItem(previa, insumos) {
   });
 }
 
-/** NF-e de compra: XML (chave opcional, só para conferir), com cada item ligado a um insumo. */
+async function carregarLeitorQr() {
+  if (window.jsQR) return window.jsQR;
+  await new Promise((ok, falha) => {
+    const script = document.createElement('script');
+    script.src = '/js/vendor/jsQR.js';
+    script.onload = ok;
+    script.onerror = () => falha(new Error('Não foi possível carregar o leitor de QR Code.'));
+    document.head.appendChild(script);
+  });
+  return window.jsQR;
+}
+
+/** Lê o QR Code da foto: leitor nativo do navegador quando existe (Android), senão jsQR em alguns tamanhos. */
+async function lerQrCode(arquivo) {
+  const imagem = await createImageBitmap(arquivo);
+  if ('BarcodeDetector' in window) {
+    try {
+      const [achado] = await new window.BarcodeDetector({ formats: ['qr_code'] }).detect(imagem);
+      if (achado?.rawValue) return achado.rawValue;
+    } catch { /* segue para o jsQR */ }
+  }
+  const jsQR = await carregarLeitorQr();
+  for (const lado of [1600, 1000, 2400]) {
+    const escala = Math.min(1, lado / Math.max(imagem.width, imagem.height));
+    const largura = Math.round(imagem.width * escala);
+    const altura = Math.round(imagem.height * escala);
+    const tela = document.createElement('canvas');
+    tela.width = largura;
+    tela.height = altura;
+    const ctx = tela.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(imagem, 0, 0, largura, altura);
+    const lido = jsQR(ctx.getImageData(0, 0, largura, altura).data, largura, altura, { inversionAttempts: 'attemptBoth' });
+    if (lido?.data) return lido.data;
+  }
+  throw new Error('Não encontrei o QR Code na foto. Fotografe só o QR Code, de perto, reto e com boa luz.');
+}
+
+/** Compra pela NF-e (XML), pelo cupom NFC-e (foto ou link do QR Code) ou só conferência pela chave. */
 export function abrirImportacao(insumos, aoImportar) {
   let previa = null;
-  let xml = null;
+  let fonte = null; // { xml } ou { url }: o servidor relê a origem ao importar
   modal({
-    titulo: 'Importar nota fiscal de compra (NF-e)',
+    titulo: 'Importar nota fiscal ou cupom',
     largo: true,
     textoSalvar: 'Dar entrada no estoque',
     corpo: html`
-      <p class="text-2" style="margin:0">Os itens vêm do <strong>arquivo XML</strong> da nota (NF-e) ou do cupom (NFC-e): ele chega no e-mail
-        do CNPJ informado no caixa e também pode ser baixado no portal da nota fiscal. Só com o número da DANFE dá para conferir a nota,
-        mas não ler os itens. Sem XML, use <strong>Compra sem nota (cupom)</strong>.</p>
+      <p class="text-2" style="margin:0"><strong>Cupom (NFC-e):</strong> fotografe o QR Code e os itens vêm da SEFAZ.
+        <strong>Nota (NF-e):</strong> escolha o arquivo XML que chega no e-mail do CNPJ. Sem nenhum dos dois, use <strong>Compra sem nota</strong>.</p>
       <div class="form-grid">
-        <label class="field" style="grid-column:1/-1">Chave de acesso da DANFE (44 números, opcional)
-          <input name="chave" inputmode="numeric" autocomplete="off" placeholder="3526 1011 2223 ..."></label>
-        <label class="field" style="grid-column:1/-1">Arquivo XML da nota
+        <label class="field">📷 Foto do QR Code do cupom
+          <input name="foto" type="file" accept="image/*" capture="environment"></label>
+        <label class="field">Arquivo XML da nota ou do cupom
           <input name="arquivo" type="file" accept=".xml,text/xml,application/xml"></label>
+        <label class="field" style="grid-column:1/-1">Ou cole o link do QR Code
+          <input name="link" inputmode="url" autocomplete="off" placeholder="https://www.nfce.fazenda.sp.gov.br/...?p=3526..."></label>
+        <label class="field" style="grid-column:1/-1">Chave de acesso da DANFE (44 números, só para conferir)
+          <input name="chave" inputmode="numeric" autocomplete="off" placeholder="3526 1011 2223 ..."></label>
       </div>
       <div data-info class="muted" style="font-size:.9rem"></div>
       <div class="table-wrap" data-itens></div>
@@ -140,6 +180,60 @@ export function abrirImportacao(insumos, aoImportar) {
         form[`fator-${numeroItem}`].value = String(fator).replace('.', ',');
       });
 
+      const exibirPrevia = (tipo) => {
+        const n = previa.nota;
+        const chaveDigitada = form.chave.value.replace(/\D/g, '');
+        mostrar(html`<strong>${previa.fornecedor}</strong> · ${tipo} nº ${n.numero} · ${new Date(n.emitidaEm).toLocaleDateString('pt-BR')}
+          · total <strong>${moeda(n.valorTotal)}</strong> · ${n.itens.length} itens
+          ${previa.jaImportada ? html`<div class="bad">⚠️ Esta compra já foi importada.</div>` : ''}
+          ${previa.paraOutroCnpj ? html`<div class="bad">⚠️ A nota foi emitida para outro CNPJ, não o da loja (Config. → Loja).</div>` : ''}
+          ${chaveDigitada.length === 44 && chaveDigitada !== n.chave ? html`<div class="bad">⚠️ A compra lida é de outra nota, não da chave digitada.</div>` : ''}`);
+        form.querySelector('[data-itens]').innerHTML = String(html`
+          <table><thead><tr><th>Item</th><th>Insumo do estoque</th><th>Unid. em cada</th><th></th></tr></thead>
+            <tbody>${linhaItem(previa, insumos)}</tbody></table>
+          <p class="muted" style="margin:6px 0 0;font-size:.8rem">"Unid. em cada": um fardo com 6 Cocas = 6; produto vendido por kg = 1.
+            O sistema lembra a escolha para a próxima compra deste fornecedor.</p>`);
+        form.querySelector('[data-pagamento]').classList.remove('hidden');
+        atualizarEntradas();
+      };
+
+      const carregar = async (novaFonte, tipo, aguarde) => {
+        mostrar(html`<span class="muted">${aguarde}</span>`);
+        try {
+          previa = novaFonte.xml ? await api.post('/notas/previa', novaFonte) : await api.post('/notas/cupom/previa', novaFonte);
+          fonte = novaFonte;
+          exibirPrevia(tipo);
+        } catch (e) {
+          previa = null;
+          fonte = null;
+          form.querySelector('[data-itens]').innerHTML = '';
+          mostrar(html`<span class="bad">${e.message}</span>`);
+        }
+      };
+
+      form.foto.addEventListener('change', async () => {
+        const foto = form.foto.files[0];
+        if (!foto) return;
+        mostrar(html`<span class="muted">Procurando o QR Code na foto…</span>`);
+        try {
+          const url = await lerQrCode(foto);
+          form.link.value = url;
+          await carregar({ url }, 'Cupom', 'Buscando os itens do cupom na SEFAZ…');
+        } catch (e) { mostrar(html`<span class="bad">${e.message}</span>`); }
+      });
+
+      form.link.addEventListener('change', () => {
+        const url = form.link.value.trim();
+        if (url) carregar({ url }, 'Cupom', 'Buscando os itens do cupom na SEFAZ…');
+      });
+
+      form.arquivo.addEventListener('change', async () => {
+        const arquivo = form.arquivo.files[0];
+        if (!arquivo) return;
+        if (arquivo.size > 1_000_000) { mostrar(html`<span class="bad">Arquivo grande demais para uma NF-e.</span>`); return; }
+        await carregar({ xml: await arquivo.text() }, 'Nota', 'Lendo o XML…');
+      });
+
       form.chave.addEventListener('input', async () => {
         const chave = form.chave.value.replace(/\D/g, '');
         if (chave.length !== 44) {
@@ -153,38 +247,14 @@ export function abrirImportacao(insumos, aoImportar) {
             · ${r.jaImportada ? html`<span class="bad">⚠️ já foi importada</span>` : html`<span class="good">✅ ainda não importada</span>`}`);
         } catch (e) { mostrar(html`<span class="bad">${e.message}</span>`); }
       });
-
-      form.arquivo.addEventListener('change', async () => {
-        const arquivo = form.arquivo.files[0];
-        if (!arquivo) return;
-        if (arquivo.size > 1_000_000) { mostrar(html`<span class="bad">Arquivo grande demais para uma NF-e.</span>`); return; }
-        xml = await arquivo.text();
-        try {
-          previa = await api.post('/notas/previa', { xml });
-        } catch (e) { previa = null; mostrar(html`<span class="bad">${e.message}</span>`); return; }
-        const n = previa.nota;
-        const chaveDigitada = form.chave.value.replace(/\D/g, '');
-        mostrar(html`<strong>${previa.fornecedor}</strong> · NF-e nº ${n.numero} · ${new Date(n.emitidaEm).toLocaleDateString('pt-BR')}
-          · total <strong>${moeda(n.valorTotal)}</strong> · ${n.itens.length} itens
-          ${previa.jaImportada ? html`<div class="bad">⚠️ Esta nota já foi importada.</div>` : ''}
-          ${previa.paraOutroCnpj ? html`<div class="bad">⚠️ A nota foi emitida para outro CNPJ, não o da loja (Config. → Loja).</div>` : ''}
-          ${chaveDigitada.length === 44 && chaveDigitada !== n.chave ? html`<div class="bad">⚠️ O XML é de outra nota, não da chave digitada.</div>` : ''}`);
-        form.querySelector('[data-itens]').innerHTML = String(html`
-          <table><thead><tr><th>Item da nota</th><th>Insumo do estoque</th><th>Unid. em cada</th><th></th></tr></thead>
-            <tbody>${linhaItem(previa, insumos)}</tbody></table>
-          <p class="muted" style="margin:6px 0 0;font-size:.8rem">"Unid. em cada": um fardo com 6 Cocas = 6; produto vendido por kg = 1.
-            O sistema lembra a escolha para a próxima nota deste fornecedor.</p>`);
-        form.querySelector('[data-pagamento]').classList.remove('hidden');
-        atualizarEntradas();
-      });
       form.addEventListener('input', atualizarEntradas);
       form.addEventListener('change', atualizarEntradas);
     },
     aoSalvar: async (d) => {
       if (!previa) {
-        throw new Error('A chave só confere a nota. Para dar entrada nos itens, escolha também o arquivo XML da nota.');
+        throw new Error('Fotografe o QR Code do cupom ou escolha o XML da nota. Só a chave confere a nota, mas não traz os itens.');
       }
-      if (previa.jaImportada) throw new Error('Esta nota já foi importada.');
+      if (previa.jaImportada) throw new Error('Esta compra já foi importada.');
       const itens = [];
       for (const { item } of previa.itens) {
         let insumoId = d[`insumo-${item.numero}`] ? Number(d[`insumo-${item.numero}`]) : null;
@@ -195,8 +265,8 @@ export function abrirImportacao(insumos, aoImportar) {
       }
       const pagamento = d.pagamento === 'NAO' ? null
         : { forma: d.pagamento === 'CAIXA' ? 'DINHEIRO' : d.pagamento, doCaixa: d.pagamento === 'CAIXA' };
-      const r = await api.post('/notas/importar', { xml, itens, pagamento });
-      toast(`Nota importada: ${r.entradas} item(ns) no estoque${r.ignorados ? `, ${r.ignorados} ignorado(s)` : ''} · ${moeda(r.valorTotal)}`);
+      const r = await api.post('/notas/importar', { ...fonte, itens, pagamento });
+      toast(`Compra importada: ${r.entradas} item(ns) no estoque${r.ignorados ? `, ${r.ignorados} ignorado(s)` : ''} · ${moeda(r.valorTotal)}`);
       await aoImportar();
     },
   });

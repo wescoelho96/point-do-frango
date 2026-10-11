@@ -4,6 +4,7 @@ import com.pointdofrango.notafiscal.NotaFiscalService.Ligacao;
 import com.pointdofrango.notafiscal.NotaFiscalService.Pagamento;
 import com.pointdofrango.notafiscal.NotaFiscalService.Previa;
 import com.pointdofrango.notafiscal.NotaFiscalService.Resultado;
+import com.pointdofrango.shared.RegraDeNegocioException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -33,8 +34,12 @@ public class NotaFiscalController {
     public record XmlRequest(@NotBlank @Size(max = MAX_XML) String xml) {
     }
 
-    public record ImportarRequest(@NotBlank @Size(max = MAX_XML) String xml, @NotNull @Size(max = 500) List<@Valid Ligacao> itens,
-                                  @Valid Pagamento pagamento) {
+    public record CupomRequest(@NotBlank @Size(max = 1000) String url) {
+    }
+
+    /** xml da NF-e/NFC-e ou url do QR Code do cupom. */
+    public record ImportarRequest(@Size(max = MAX_XML) String xml, @Size(max = 1000) String url,
+                                  @NotNull @Size(max = 500) List<@Valid Ligacao> itens, @Valid Pagamento pagamento) {
     }
 
     public record ChaveResponse(LeitorNfe.Chave chave, boolean jaImportada) {
@@ -67,10 +72,19 @@ public class NotaFiscalController {
         return service.previa(req.xml());
     }
 
+    @PostMapping("/cupom/previa")
+    @Operation(summary = "Lê os itens do cupom NFC-e pela página de consulta do QR Code na SEFAZ")
+    public Previa previaDoCupom(@Valid @RequestBody CupomRequest req) {
+        return service.previaDoCupom(req.url());
+    }
+
     @PostMapping("/importar")
     @Operation(summary = "Dá entrada dos itens ligados a insumos e lança o total como saída do fornecedor")
     public Resultado importar(@Valid @RequestBody ImportarRequest req, Authentication auth) {
-        return service.importar(req.xml(), req.itens(), req.pagamento(), auth.getName());
+        if ((req.xml() == null || req.xml().isBlank()) && (req.url() == null || req.url().isBlank())) {
+            throw new RegraDeNegocioException("Envie o XML da nota ou o QR Code do cupom.");
+        }
+        return service.importar(req.xml(), req.url(), req.itens(), req.pagamento(), auth.getName());
     }
 
     @GetMapping
