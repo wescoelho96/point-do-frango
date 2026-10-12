@@ -1,6 +1,6 @@
 import { api, sessao } from '../api.js';
 import { abrirImportacao } from './nota-fiscal.js';
-import { aoClicar, dataHora, decimal, html, modal, moeda, numero, pct, renderizar, rotulo, toast, toastErro } from '../ui.js';
+import { aoClicar, campoParcelas, dataHora, decimal, html, ligarParcelas, modal, moeda, numero, parcelasDe, pct, renderizar, rotulo, toast, toastErro } from '../ui.js';
 
 const UNIDADES = ['QUILOGRAMA', 'LITRO', 'UNIDADE', 'GRAMA', 'MILILITRO'];
 
@@ -540,11 +540,13 @@ export async function montar(container) {
               <option value="CREDITO">Crédito</option>
               <option value="NAO">Não lançar nas saídas</option>
             </select></label>
+          ${campoParcelas()}
           <label class="field">Fornecedor / mercado
             <select name="fornecedorId"><option value="">—</option>
               ${fornecedores.filter((f) => f.ativo).map((f) => html`<option value="${f.id}">${f.nome}</option>`)}</select></label>
         </div>`,
       aoAbrir: (form) => {
+        ligarParcelas(form, 'pagamento', () => [...form.querySelectorAll('[name=cValor]')].reduce((s, el) => s + (decimal(el.value) || 0), 0));
         const lista = form.querySelector('[data-itens-compra]');
         const totalEl = form.querySelector('[data-total-compra]');
         const atualizarTotal = () => {
@@ -588,6 +590,7 @@ export async function montar(container) {
             forma: d.pagamento === 'CAIXA' ? 'DINHEIRO' : d.pagamento,
             doCaixa: d.pagamento === 'CAIXA',
             fornecedorId: d.fornecedorId ? Number(d.fornecedorId) : null,
+            parcelas: parcelasDe(d, 'pagamento'),
           },
         });
         toast(`Compra lançada: ${r.itens} item(ns) · ${moeda(r.valorTotal)}`);
@@ -690,6 +693,7 @@ export async function montar(container) {
                 <option value="CREDITO">Crédito</option>
                 <option value="NAO">Não lançar nas saídas</option>
               </select></label>
+            ${campoParcelas()}
             <label class="field">Fornecedor / mercado
               <select name="fornecedorId"><option value="">—</option>
                 ${fornecedores.filter((f) => f.ativo).map((f) => html`<option value="${f.id}">${f.nome}</option>`)}</select></label>
@@ -697,6 +701,7 @@ export async function montar(container) {
           <label class="field">Observação<input name="observacao" maxlength="255" placeholder="Fornecedor, nota fiscal…"></label>`,
         textoSalvar: 'Registrar entrada',
         aoAbrir: (form) => {
+          ligarParcelas(form, 'pagamento', () => decimal(form.valorTotal.value));
           const atualizar = () => {
             const emb = i.embalagens.find((e) => String(e.id) === form.forma.value);
             form.querySelector('[data-rotulo-qtd]').textContent = emb ? 'Quantas embalagens' : `Quantidade (${i.sigla})`;
@@ -731,6 +736,7 @@ export async function montar(container) {
               forma: d.pagamento === 'CAIXA' ? 'DINHEIRO' : d.pagamento,
               doCaixa: d.pagamento === 'CAIXA',
               fornecedorId: d.fornecedorId ? Number(d.fornecedorId) : null,
+              parcelas: parcelasDe(d, 'pagamento'),
             },
           });
           toast(`Novo saldo: ${numero(r.estoqueAtual)} ${r.sigla} · custo médio ${moeda(r.custoUnitario)}/${r.sigla}`);

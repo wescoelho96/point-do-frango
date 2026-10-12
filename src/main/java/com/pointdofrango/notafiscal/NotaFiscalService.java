@@ -13,6 +13,8 @@ import com.pointdofrango.saida.Fornecedor;
 import com.pointdofrango.saida.SaidaService;
 import com.pointdofrango.saida.SaidaService.NovaSaida;
 import com.pointdofrango.shared.RegraDeNegocioException;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
@@ -72,7 +74,12 @@ public class NotaFiscalService {
     public record Ligacao(int numero, Long insumoId, BigDecimal fator) {
     }
 
-    public record Pagamento(FormaPagamento forma, boolean doCaixa) {
+    /** parcelas: só no crédito, 1ª parcela no mês seguinte. */
+    public record Pagamento(FormaPagamento forma, boolean doCaixa, @Min(1) @Max(12) Integer parcelas) {
+
+        public Pagamento(FormaPagamento forma, boolean doCaixa) {
+            this(forma, doCaixa, null);
+        }
     }
 
     public record Resultado(String chave, int entradas, int ignorados, BigDecimal valorTotal) {
@@ -142,8 +149,8 @@ public class NotaFiscalService {
                 caixa.registrarSaida(CategoriaSaida.INSUMOS, descricao, nota.valorTotal(), FormaPagamento.DINHEIRO, null,
                         fornecedor.getId(), usuario);
             } else {
-                saidas.lancar(new NovaSaida(nota.emitidaEm().atZoneSameInstant(zona).toLocalDate(), CategoriaSaida.INSUMOS,
-                        descricao, nota.valorTotal(), pagamento.forma(), fornecedor.getId(), null, null), usuario);
+                saidas.lancarParcelado(new NovaSaida(nota.emitidaEm().atZoneSameInstant(zona).toLocalDate(), CategoriaSaida.INSUMOS,
+                        descricao, nota.valorTotal(), pagamento.forma(), fornecedor.getId(), null, null), pagamento.parcelas(), usuario);
             }
         }
         notas.save(new NotaFiscalCompra(nota, fornecedor.getId(), usuario, Instant.now(clock)));

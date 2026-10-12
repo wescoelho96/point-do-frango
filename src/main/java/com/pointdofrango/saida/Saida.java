@@ -61,6 +61,14 @@ public class Saida {
     @Column(length = 48)
     private String codigoBarras;
 
+    /** Compra parcelada no crédito: parcela 2 de 6, por exemplo. Nulos numa saída à vista. */
+    private Short parcela;
+
+    private Short parcelas;
+
+    @Column(name = "grupo_parcelas", length = 36)
+    private String grupoParcelas;
+
     @Column(nullable = false)
     private Instant criadoEm;
 
@@ -88,6 +96,24 @@ public class Saida {
         this.forma = forma;
         this.criadoPor = usuario;
         this.criadoEm = agora;
+    }
+
+    void parcelar(int parcela, int parcelas, String grupo) {
+        this.parcela = (short) parcela;
+        this.parcelas = (short) parcelas;
+        this.grupoParcelas = grupo;
+    }
+
+    public Integer getParcela() {
+        return parcela == null ? null : parcela.intValue();
+    }
+
+    public Integer getParcelas() {
+        return parcelas == null ? null : parcelas.intValue();
+    }
+
+    public String getGrupoParcelas() {
+        return grupoParcelas;
     }
 
     void vincular(Fornecedor fornecedor, Colaborador colaborador, Long despesaFixaId) {

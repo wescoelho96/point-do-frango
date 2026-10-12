@@ -4,6 +4,8 @@ import com.pointdofrango.financeiro.FormaPagamento;
 import com.pointdofrango.shared.Dinheiro;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -76,7 +78,12 @@ public final class EstoqueDtos {
      * Se informado, a compra também entra nas saídas do mês. doCaixa: dinheiro da gaveta, vira saída
      * do caixa aberto; senão foi pago por fora (PIX, cartão).
      */
-    public record PagamentoCompra(@NotNull FormaPagamento forma, boolean doCaixa, Long fornecedorId) {
+    public record PagamentoCompra(@NotNull FormaPagamento forma, boolean doCaixa, Long fornecedorId,
+                                  @Min(1) @Max(12) Integer parcelas) {
+
+        public PagamentoCompra(FormaPagamento forma, boolean doCaixa, Long fornecedorId) {
+            this(forma, doCaixa, fornecedorId, null);
+        }
     }
 
     /** Compra com vários itens e um só pagamento (cupom de mercado, compra sem nota). */

@@ -8,6 +8,8 @@ import java.util.List;
 
 public interface SaidaRepository extends JpaRepository<Saida, Long> {
 
+    List<Saida> findByGrupoParcelas(String grupoParcelas);
+
     /** Datas inclusivas. */
     @EntityGraph(attributePaths = {"fornecedor", "colaborador"})
     List<Saida> findByDataBetweenOrderByDataDescIdDesc(LocalDate inicio, LocalDate fim);

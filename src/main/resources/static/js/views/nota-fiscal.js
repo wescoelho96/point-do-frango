@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { decimal, html, modal, moeda, numero, toast } from '../ui.js';
+import { campoParcelas, decimal, html, ligarParcelas, modal, moeda, numero, parcelasDe, toast } from '../ui.js';
 
 const semAcento = (x) => String(x ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const palavras = (x) => semAcento(x).split(/[^a-z0-9]+/).filter((p) => p.length >= 3);
@@ -163,8 +163,10 @@ export function abrirImportacao(insumos, aoImportar) {
             <option value="CAIXA">Dinheiro da gaveta (caixa aberto)</option>
             <option value="NAO">Já lancei o pagamento (não lançar de novo)</option>
           </select></label>
+        ${campoParcelas()}
       </div>`,
     aoAbrir: (form) => {
+      ligarParcelas(form, 'pagamento', () => previa?.nota.valorTotal);
       const info = form.querySelector('[data-info]');
       const mostrar = (conteudo) => { info.innerHTML = String(conteudo); };
 
@@ -272,7 +274,7 @@ export function abrirImportacao(insumos, aoImportar) {
         itens.push({ numero: item.numero, insumoId, fator: decimal(d[`fator-${item.numero}`]) });
       }
       const pagamento = d.pagamento === 'NAO' ? null
-        : { forma: d.pagamento === 'CAIXA' ? 'DINHEIRO' : d.pagamento, doCaixa: d.pagamento === 'CAIXA' };
+        : { forma: d.pagamento === 'CAIXA' ? 'DINHEIRO' : d.pagamento, doCaixa: d.pagamento === 'CAIXA', parcelas: parcelasDe(d, 'pagamento') };
       const r = await api.post('/notas/importar', { ...fonte, itens, pagamento });
       toast(`Compra importada: ${r.entradas} item(ns) no estoque${r.ignorados ? `, ${r.ignorados} ignorado(s)` : ''} · ${moeda(r.valorTotal)}`);
       await aoImportar();

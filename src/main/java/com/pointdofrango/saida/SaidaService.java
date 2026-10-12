@@ -17,12 +17,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 public class SaidaService {
@@ -50,6 +53,51 @@ public class SaidaService {
 
     public record NovaSaida(LocalDate data, CategoriaSaida categoria, String descricao, BigDecimal valor,
                             FormaPagamento forma, Long fornecedorId, Long colaboradorId, Long despesaFixaId) {
+    }
+
+    public static final int MAX_PARCELAS = 12;
+
+    /**
+     * Crédito: entra no mês seguinte à compra, quando a fatura é paga; parcelado, uma saída por mês.
+     * Centavos que sobram da divisão ficam na 1ª parcela. Outras formas: uma saída na data da compra.
+     */
+    @Transactional
+    public List<Saida> lancarParcelado(NovaSaida n, Integer parcelas, String usuario) {
+        int vezes = parcelas == null ? 1 : parcelas;
+        if (n.forma() != FormaPagamento.CREDITO) {
+            if (vezes > 1) {
+                throw new RegraDeNegocioException("Só o pagamento no crédito pode ser parcelado.");
+            }
+            return List.of(lancar(n, usuario));
+        }
+        if (vezes < 1 || vezes > MAX_PARCELAS) {
+            throw new RegraDeNegocioException("Parcelamento em até " + MAX_PARCELAS + " vezes.");
+        }
+        LocalDate compra = n.data() != null ? n.data() : LocalDate.now(clock.withZone(zona));
+        if (vezes == 1) {
+            return List.of(lancar(new NovaSaida(compra.plusMonths(1), n.categoria(), n.descricao(), n.valor(), n.forma(),
+                    n.fornecedorId(), n.colaboradorId(), n.despesaFixaId()), usuario));
+        }
+        BigDecimal parcela = n.valor().divide(BigDecimal.valueOf(vezes), 2, RoundingMode.DOWN);
+        BigDecimal primeira = n.valor().subtract(parcela.multiply(BigDecimal.valueOf(vezes - 1)));
+        String grupo = UUID.randomUUID().toString();
+        Fornecedor fornecedor = fornecedorOuNulo(n.fornecedorId());
+        Colaborador colaborador = n.colaboradorId() == null ? null : cadastros.colaborador(n.colaboradorId());
+        List<Saida> lancadas = new ArrayList<>();
+        for (int i = 1; i <= vezes; i++) {
+            String sufixo = " (" + i + "/" + vezes + ")";
+            String descricao = n.descricao().strip();
+            if (descricao.length() + sufixo.length() > 150) {
+                descricao = descricao.substring(0, 150 - sufixo.length());
+            }
+            Saida saida = new Saida(compra.plusMonths(i), n.categoria(), descricao + sufixo, i == 1 ? primeira : parcela,
+                    n.forma(), usuario, Instant.now(clock));
+            saida.vincular(fornecedor, colaborador, n.despesaFixaId());
+            saida.parcelar(i, vezes, grupo);
+            lancadas.add(saidas.save(saida));
+        }
+        log.info("Compra parcelada em {}x lançada por {}: {} ({})", vezes, usuario, n.descricao(), n.valor());
+        return lancadas;
     }
 
     @Transactional
@@ -92,6 +140,12 @@ public class SaidaService {
     @Transactional
     public void remover(Long id, String usuario) {
         Saida s = saidas.findById(id).orElseThrow(() -> new RecursoNaoEncontradoException("Saída", id));
+        if (s.getGrupoParcelas() != null) {
+            // Parcela é parte de uma compra: remover desfaz a compra inteira.
+            saidas.deleteAll(saidas.findByGrupoParcelas(s.getGrupoParcelas()));
+            log.info("Compra parcelada de #{} ({}x) removida por {}", id, s.getParcelas(), usuario);
+            return;
+        }
         saidas.delete(s);
         log.info("Saída #{} ({}, {}) removida por {}", id, s.getDescricao(), s.getValor(), usuario);
     }
@@ -109,8 +163,8 @@ public class SaidaService {
             caixa.registrarSaida(CategoriaSaida.INSUMOS, compra.descricao(), compra.valor(), FormaPagamento.DINHEIRO,
                     null, pg.fornecedorId(), compra.usuario());
         } else {
-            lancar(new NovaSaida(null, CategoriaSaida.INSUMOS, compra.descricao(), compra.valor(), pg.forma(),
-                    pg.fornecedorId(), null, null), compra.usuario());
+            lancarParcelado(new NovaSaida(null, CategoriaSaida.INSUMOS, compra.descricao(), compra.valor(), pg.forma(),
+                    pg.fornecedorId(), null, null), pg.parcelas(), compra.usuario());
         }
     }
 

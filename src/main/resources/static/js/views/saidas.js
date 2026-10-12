@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { aoClicar, decimal, hojeISO, html, modal, moeda, numero, pct, renderizar, rotulo, telefone, toast, toastErro } from '../ui.js';
+import { aoClicar, campoParcelas, decimal, hojeISO, html, ligarParcelas, modal, moeda, numero, parcelasDe, pct, renderizar, rotulo, telefone, toast, toastErro } from '../ui.js';
 
 const CATEGORIAS = ['INSUMOS', 'FUNCIONARIO', 'SALARIO', 'MOTOBOY', 'PRO_LABORE', 'IMPOSTO', 'CONTA_FIXA', 'EQUIPAMENTO', 'OUTRO'];
 const COM_PESSOA = ['FUNCIONARIO', 'SALARIO', 'MOTOBOY'];
@@ -214,6 +214,7 @@ export async function montar(container) {
         <label class="field" style="grid-column:1/-1">Descrição<input name="descricao" required maxlength="150" value="${SUGESTAO.INSUMOS}"></label>
         <label class="field">Valor (R$)<input name="valor" required inputmode="decimal" autocomplete="off"></label>
         <label class="field">Pago com<select name="forma">${FORMAS.map((f) => html`<option value="${f}">${rotulo(f)}</option>`)}</select></label>
+        ${campoParcelas()}
         <label class="field" data-so="pessoa" style="grid-column:1/-1">Pessoa<select name="colaboradorId">
           <option value="">—</option>${equipe.filter((c) => c.ativo).map((c) => html`<option value="${c.id}">${c.nome} (${rotulo(c.funcao)})</option>`)}</select></label>
         <label class="field" data-so="fornecedor" style="grid-column:1/-1">Fornecedor / mercado<select name="fornecedorId">
@@ -229,6 +230,7 @@ export async function montar(container) {
       titulo: preset.categoria === 'FUNCIONARIO' ? 'Lançar diária' : 'Lançar pagamento',
       corpo: formSaida(preset),
       aoAbrir: (form) => {
+        ligarParcelas(form, 'forma', () => decimal(form.valor.value));
         let sugerida = SUGESTAO.INSUMOS;
         // escolheu a pessoa: valor = diária do cadastro e descrição com o dia trabalhado
         const aoEscolherPessoa = () => {
@@ -254,6 +256,7 @@ export async function montar(container) {
         if (COM_PESSOA.includes(d.categoria) && !d.colaboradorId) throw new Error('Escolha a pessoa que recebeu.');
         await api.post('/saidas', {
           data: d.data || null, categoria: d.categoria, descricao: d.descricao, valor: decimal(d.valor), forma: d.forma,
+          parcelas: parcelasDe(d, 'forma'),
           colaboradorId: COM_PESSOA.includes(d.categoria) && d.colaboradorId ? Number(d.colaboradorId) : null,
           fornecedorId: COM_FORNECEDOR.includes(d.categoria) && d.fornecedorId ? Number(d.fornecedorId) : null,
         });
@@ -323,7 +326,7 @@ export async function montar(container) {
     },
     remover: (el) => modal({
       titulo: 'Remover lançamento',
-      corpo: html`<p class="text-2">O pagamento sai das saídas do mês.</p>`,
+      corpo: html`<p class="text-2">O pagamento sai das saídas do mês. Se for parcela de uma compra no crédito, todas as parcelas dessa compra saem juntas.</p>`,
       textoSalvar: 'Remover',
       perigo: true,
       aoSalvar: async () => { await api.del(`/saidas/${el.dataset.id}`); await carregar(); },

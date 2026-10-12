@@ -9,6 +9,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -41,7 +43,8 @@ public class SaidaController {
     public record SaidaRequest(LocalDate data, @NotNull CategoriaSaida categoria,
                                @NotBlank @Size(max = 150) String descricao,
                                @NotNull @DecimalMin(value = "0", inclusive = false) @DecimalMax("999999") BigDecimal valor,
-                               @NotNull FormaPagamento forma, Long fornecedorId, Long colaboradorId) {
+                               @NotNull FormaPagamento forma, Long fornecedorId, Long colaboradorId,
+                               @Min(1) @Max(SaidaService.MAX_PARCELAS) Integer parcelas) {
     }
 
     public record PagarContaRequest(@DecimalMin(value = "0", inclusive = false) @DecimalMax("999999") BigDecimal valor,
@@ -83,8 +86,8 @@ public class SaidaController {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Lança um pagamento feito por fora do caixa (PIX, boleto, cartão)")
     public void lancar(@Valid @RequestBody SaidaRequest r, Authentication auth) {
-        service.lancar(new NovaSaida(r.data(), r.categoria(), r.descricao(), r.valor(), r.forma(), r.fornecedorId(),
-                r.colaboradorId(), null), auth.getName());
+        service.lancarParcelado(new NovaSaida(r.data(), r.categoria(), r.descricao(), r.valor(), r.forma(), r.fornecedorId(),
+                r.colaboradorId(), null), r.parcelas(), auth.getName());
     }
 
     @PostMapping("/saidas/contas-fixas/{id}/pagar")

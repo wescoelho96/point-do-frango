@@ -368,6 +368,8 @@ Em **Financeiro**, aba **Saídas do mês**, ficam todas as despesas: as da gavet
 
 ![Saídas do mês](img/saidas.png)
 
+**Compras no cartão de crédito:** ao escolher **Crédito** (em pagamentos, entradas de estoque, notas, cupons e compras sem nota), aparece o campo **Parcelas no crédito**. A compra entra nas saídas do mês seguinte, quando a fatura é paga; parcelada, cada parcela vai para um mês (por exemplo, R$ 600 em 3x: R$ 200 em cada um dos três meses seguintes, com a descrição "(1/3)", "(2/3)" e "(3/3)"). O estoque recebe o custo cheio da compra no dia da entrada. Remover uma parcela remove todas as parcelas daquela compra.
+
 **Lançar um pagamento feito por fora da gaveta:**
 
 1. Clique em **+ Lançar pagamento**.

@@ -20,6 +20,37 @@ export function html(partes, ...valores) {
 
 export function renderizar(el, conteudo) { el.innerHTML = String(conteudo); }
 
+// ---------- Parcelas no crédito ----------
+// Compra no crédito entra no mês seguinte (fatura); parcelada, uma parcela por mês a partir dele.
+export function campoParcelas() {
+  return html`
+    <label class="field hidden" data-parcelas>Parcelas no crédito
+      <select name="parcelas">${Array.from({ length: 12 }, (_, i) => i + 1)
+        .map((n) => html`<option value="${n}">${n === 1 ? 'À vista (1x)' : `${n}x`}</option>`)}</select>
+      <span class="muted" style="font-size:.78rem" data-parcelas-info></span></label>`;
+}
+
+/** Mostra o campo só quando a forma escolhida é crédito; total() dá o valor da compra para a prévia. */
+export function ligarParcelas(form, nomeForma, total = () => null) {
+  const campo = form.querySelector('[data-parcelas]');
+  const info = campo.querySelector('[data-parcelas-info]');
+  const atualizar = () => {
+    const credito = form[nomeForma].value === 'CREDITO';
+    campo.classList.toggle('hidden', !credito);
+    if (!credito) form.parcelas.value = '1';
+    const vezes = Number(form.parcelas.value);
+    const valor = total();
+    info.textContent = vezes > 1
+      ? `${vezes}x${valor ? ` de ${moeda(valor / vezes)}` : ''} · 1ª parcela no mês seguinte`
+      : 'Entra nas saídas do mês seguinte (fatura do cartão)';
+  };
+  form.addEventListener('change', atualizar);
+  form.addEventListener('input', atualizar);
+  atualizar();
+}
+
+export const parcelasDe = (d, nomeForma) => (d[nomeForma] === 'CREDITO' ? Number(d.parcelas) || 1 : null);
+
 /** No celular as tabelas viram cartões; cada célula leva o título da coluna (CSS: td::before). */
 export function rotularTabelas(raiz = document) {
   raiz.querySelectorAll('table').forEach((tabela) => {
