@@ -15,7 +15,9 @@ RUN addgroup -S app && adduser -S app -G app
 USER app
 COPY --from=build /app/target/point-do-frango.jar app.jar
 
+# Instância pequena (pouca CPU): só o compilador C1 e o coletor serial encurtam a subida da aplicação
+# e evitam o tempo limite do deploy; para este volume de uso a diferença de desempenho não aparece.
 ENV SPRING_PROFILES_ACTIVE=prod \
-    JAVA_OPTS="-XX:MaxRAMPercentage=75 -Duser.timezone=America/Sao_Paulo"
+    JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xss512k -Duser.timezone=America/Sao_Paulo"
 EXPOSE 8080
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
