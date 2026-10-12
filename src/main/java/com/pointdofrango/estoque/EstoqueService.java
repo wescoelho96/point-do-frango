@@ -7,6 +7,7 @@ import com.pointdofrango.estoque.EstoqueDtos.ItemCompra;
 import com.pointdofrango.estoque.EstoqueDtos.EntradaRequest;
 import com.pointdofrango.estoque.EstoqueDtos.InsumoRequest;
 import com.pointdofrango.estoque.EstoqueDtos.ReposicaoResponse;
+import com.pointdofrango.estoque.EstoqueDtos.UltimaEntrada;
 import com.pointdofrango.shared.Dinheiro;
 import com.pointdofrango.shared.EstoqueInsuficienteException;
 import com.pointdofrango.shared.RecursoNaoEncontradoException;
@@ -17,8 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -111,8 +114,56 @@ public class EstoqueService {
                     + "Para tirar da lista, desmarque \"Ativo\".");
         }
         eventos.publishEvent(new InsumoExcluido(id, insumo.getNome()));
-        movimentacoes.apagarDoInsumo(id);
-        insumos.delete(insumo);
+        movimentacoes.apagarDoInsumo(id); // grava e limpa o contexto: o insumo é apagado pelo id
+        insumos.deleteById(id);
+    }
+
+    @Transactional(readOnly = true)
+    public List<UltimaEntrada> ultimasEntradas(int dias) {
+        Instant desde = Instant.now(clock).minus(Duration.ofDays(dias));
+        // A mesma compra pode trazer o item em várias linhas (2 × Sassami 6 kg): soma as da mesma origem.
+        return movimentacoes.ultimasEntradas(TipoMovimentacao.ENTRADA, desde).stream()
+                .map(m -> new UltimaEntrada(m.getInsumo().getId(), m.getCriadoEm(),
+                        m.getObservacao() == null ? m.getQuantidade()
+                                : movimentacoes.somaEntradas(m.getInsumo().getId(), m.getObservacao(), m.getCriadoEm().minus(Duration.ofMinutes(30))),
+                        m.getObservacao()))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<MovimentacaoEstoque> entradasDaCompra(Collection<String> observacoes, Instant desde, Instant ate) {
+        return movimentacoes.findByTipoAndObservacaoInAndCriadoEmBetween(TipoMovimentacao.ENTRADA, observacoes, desde, ate);
+    }
+
+    /**
+     * Desfaz a entrada de uma compra. O valor dela sai da diferença entre o valor em estoque depois e antes
+     * (o custo médio só muda em entradas). Retorna o id do ajuste que registra o estorno no extrato.
+     */
+    @Transactional
+    public Long estornarEntrada(Long movimentoId, String motivo, String usuario) {
+        MovimentacaoEstoque entrada = movimentacoes.findById(movimentoId)
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Movimentação", movimentoId));
+        if (entrada.getTipo() != TipoMovimentacao.ENTRADA) {
+            throw new RegraDeNegocioException("Só entradas de compra podem ser desfeitas.");
+        }
+        Insumo insumo = travar(entrada.getInsumo().getId());
+        BigDecimal custoAntes = movimentacoes.findFirstByInsumoIdAndIdLessThanOrderByIdDesc(insumo.getId(), movimentoId)
+                .map(MovimentacaoEstoque::getCustoUnitario).orElse(BigDecimal.ZERO);
+        BigDecimal saldoAntes = entrada.getSaldoApos().subtract(entrada.getQuantidade()).max(BigDecimal.ZERO);
+        BigDecimal valor = entrada.getSaldoApos().multiply(entrada.getCustoUnitario()).subtract(saldoAntes.multiply(custoAntes));
+        insumo.estornarEntrada(entrada.getQuantidade(), valor.max(BigDecimal.ZERO));
+        return registrar(insumo, TipoMovimentacao.AJUSTE, entrada.getQuantidade().negate(), null, motivo, usuario).getId();
+    }
+
+    /** Insumo que só existia por causa da compra desfeita (todas as movimentações são dela) é apagado. */
+    @Transactional
+    public boolean excluirSeSoDaCompra(Long insumoId, Set<Long> movimentacoesDaCompra) {
+        // Usado em ficha técnica fica, zerado: o produto continua apontando para ele.
+        if (insumos.usadoEmFichaTecnica(insumoId) || !movimentacoesDaCompra.containsAll(movimentacoes.idsDoInsumo(insumoId))) {
+            return false;
+        }
+        excluir(insumoId);
+        return true;
     }
 
     @Transactional(readOnly = true)

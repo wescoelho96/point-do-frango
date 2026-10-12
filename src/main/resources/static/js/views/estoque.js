@@ -68,15 +68,18 @@ export async function montar(container) {
   let produtos = [];
   let fornecedores = [];
   let reposicao = new Map();
-  const filtro = { texto: '', grupo: '', repor: false };
+  const filtro = { texto: '', grupo: '', repor: false, chegou: false };
+  let chegadas = new Map();
 
   async function carregar() {
     let paraRepor;
-    [insumos, produtos, fornecedores, paraRepor] = await Promise.all([
+    let ultimas;
+    [insumos, produtos, fornecedores, paraRepor, ultimas] = await Promise.all([
       api.get('/insumos'), api.get('/produtos'), admin ? api.get('/fornecedores') : [],
-      admin ? api.get('/insumos/reposicao') : [],
+      admin ? api.get('/insumos/reposicao') : [], api.get('/insumos/ultimas-entradas'),
     ]);
     reposicao = new Map(paraRepor.map((r) => [r.insumoId, r]));
+    chegadas = new Map(ultimas.map((e) => [e.insumoId, e]));
     desenhar();
   }
 
@@ -104,6 +107,7 @@ export async function montar(container) {
           ${admin ? html`<button class="btn" data-acao="cortesias">🎁 Cortesias</button>
             <button class="btn" data-acao="nota">📷 Importar nota ou cupom</button>
             <button class="btn" data-acao="compra">🛒 Compra sem nota (cupom)</button>
+            <button class="btn" data-acao="importadas">🧾 Compras importadas</button>
             <button class="btn btn-primary" data-acao="novo">+ Novo insumo</button>` : ''}
         </div>
       </div>
@@ -114,6 +118,7 @@ export async function montar(container) {
           ${grupos().map((g) => html`<option value="${g}" ${filtro.grupo === g ? 'selected' : ''}>${g}</option>`)}
         </select>
         <label class="row" style="gap:6px;font-size:.9rem"><input type="checkbox" data-filtro="repor" ${filtro.repor ? 'checked' : ''} style="width:auto"> Só o que precisa repor</label>
+        <label class="row" style="gap:6px;font-size:.9rem"><input type="checkbox" data-filtro="chegou" ${filtro.chegou ? 'checked' : ''} style="width:auto"> Só o que chegou (3 dias)</label>
         <button class="btn btn-sm" data-acao="historico-consumo">Consumo da equipe (30 dias)</button>
       </div>
       <div class="card table-wrap" data-tabela></div>`);
@@ -124,6 +129,7 @@ export async function montar(container) {
     const termo = semAcento(filtro.texto);
     return insumos.filter((i) => (!filtro.grupo || (i.grupo || SEM_GRUPO) === filtro.grupo)
       && (!filtro.repor || (i.ativo && i.abaixoDoMinimo))
+      && (!filtro.chegou || chegadas.has(i.id))
       && (!termo || semAcento(`${i.nome} ${i.marca ?? ''} ${i.grupo ?? ''}`).includes(termo)));
   }
 
@@ -136,7 +142,8 @@ export async function montar(container) {
               ? `${numero(i.unidadeUsoPorUnidade, 2)} ${plural(i.unidadeUsoNome, 2)}/${i.sigla}` : ''}</div>` : ''}</td>
         <td class="num right">${numero(i.estoqueAtual)} ${i.sigla}
           ${i.ativo && i.abaixoDoMinimo ? html` <span class="badge badge-bad">⚠ repor</span>` : ''}
-          <div class="sub">mín. ${numero(i.estoqueMinimo)} ${i.sigla}${equivalencias(i) ? ` · ${equivalencias(i)}` : ''}</div></td>
+          <div class="sub">mín. ${numero(i.estoqueMinimo)} ${i.sigla}${equivalencias(i) ? ` · ${equivalencias(i)}` : ''}</div>
+          ${chegadas.has(i.id) ? linhaChegada(chegadas.get(i.id), i.sigla) : ''}</td>
         ${admin ? colunasDeCusto(i) : ''}
         <td class="right acoes">
           ${admin ? html`
@@ -181,6 +188,17 @@ export async function montar(container) {
         <div class="sub" title="${margens.length} produto(s) usam este insumo">margem ${faixaPct(margens)} · estoque rende ${faixa(margens.map((m) => ({ v: m.porcoesNoEstoque * m.lucro })), 'v')}</div>`
         : html`<span class="muted" title="Não é o ingrediente principal de nenhum produto">—</span>`}</td>
       ${celulaReposicao(i)}`;
+  }
+
+  /** O que entrou por último e de onde veio (cupom, nota, compra sem nota). */
+  function linhaChegada(e, sigla) {
+    const dia = new Date(e.quando);
+    const hoje = new Date();
+    const ontem = new Date(Date.now() - 86_400_000);
+    const quando = dia.toDateString() === hoje.toDateString() ? 'hoje'
+      : dia.toDateString() === ontem.toDateString() ? 'ontem' : dia.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    return html`<div class="sub good" title="${e.origem || 'Entrada de estoque'}">📥 +${numero(e.quantidade)} ${sigla} ${quando}${e.origem
+      ? ` · ${e.origem.length > 32 ? `${e.origem.slice(0, 32)}…` : e.origem}` : ''}</div>`;
   }
 
   function celulaReposicao(i) {
@@ -492,7 +510,7 @@ export async function montar(container) {
   const aoFiltrar = (ev) => {
     const campo = ev.target.dataset.filtro;
     if (!campo) return;
-    filtro[campo] = campo === 'repor' ? ev.target.checked : ev.target.value;
+    filtro[campo] = ev.target.type === 'checkbox' ? ev.target.checked : ev.target.value;
     desenharTabela();
   };
   container.addEventListener('input', aoFiltrar);
@@ -599,6 +617,48 @@ export async function montar(container) {
     });
   }
 
+  /** Notas e cupons importados, com a opção de desfazer uma importação que entrou errada. */
+  async function abrirImportadas() {
+    const notas = await api.get('/notas');
+    modal({
+      titulo: 'Compras importadas',
+      largo: true,
+      corpo: notas.length ? html`
+        <p class="text-2" style="margin:0">Desfazer tira do estoque o que essa compra deu entrada, remove o pagamento das saídas
+          e apaga os itens que só existiam por causa dela. Depois é só importar de novo.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Compra</th><th>Emitida</th><th class="right">Total</th><th>Importada</th><th></th></tr></thead>
+          <tbody>${notas.map((n) => html`
+            <tr>
+              <td><strong>${n.chave.slice(20, 22) === '65' ? 'Cupom' : 'NF-e'} nº ${n.numero}</strong><div class="sub">${n.emitente}</div></td>
+              <td class="num">${new Date(n.emitidaEm).toLocaleDateString('pt-BR')}</td>
+              <td class="num right">${moeda(n.valorTotal)}</td>
+              <td class="num">${dataHora(n.importadaEm)}<div class="sub">${n.importadaPor}</div></td>
+              <td class="right"><button type="button" class="btn btn-sm btn-danger" data-desfazer="${n.id}">Desfazer</button></td>
+            </tr>`)}</tbody>
+        </table></div>` : html`<p class="muted">Nenhuma nota ou cupom importado ainda.</p>`,
+      aoAbrir: (form) => form.addEventListener('click', (ev) => {
+        const id = ev.target.closest('[data-desfazer]')?.dataset.desfazer;
+        if (!id) return;
+        const n = notas.find((x) => String(x.id) === id);
+        document.getElementById('modal').close();
+        modal({
+          titulo: `Desfazer importação nº ${n.numero}`,
+          corpo: html`<p class="text-2" style="margin:0">${n.emitente} · ${moeda(n.valorTotal)}. O estoque volta ao que era antes dessa
+            compra e o pagamento sai das saídas. Se algum item já foi usado depois, ajuste pela contagem antes.</p>`,
+          textoSalvar: 'Desfazer importação',
+          perigo: true,
+          aoSalvar: async () => {
+            const r = await api.del(`/notas/${id}`);
+            toast(`Importação desfeita: ${r.entradas} entrada(s) estornada(s)${r.insumosRemovidos
+              ? `, ${r.insumosRemovidos} item(ns) removido(s)` : ''}${r.saidasRemovidas ? ', pagamento removido das saídas' : ''}`);
+            await carregar();
+          },
+        });
+      }),
+    });
+  }
+
   function confirmarExclusao(i) {
     const juntos = soDesteInsumo(i).map((p) => p.nome).join(', ');
     modal({
@@ -624,6 +684,7 @@ export async function montar(container) {
     consumo: () => abrirConsumo(),
     nota: () => abrirImportacao(insumos, carregar),
     compra: () => abrirCompra(),
+    importadas: () => abrirImportadas().catch(toastErro),
     cortesias: () => abrirCortesias().catch(toastErro),
     'historico-consumo': () => abrirHistoricoConsumo().catch(toastErro),
     editar: (el) => {

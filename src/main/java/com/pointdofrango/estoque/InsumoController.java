@@ -8,6 +8,7 @@ import com.pointdofrango.estoque.EstoqueDtos.InsumoRequest;
 import com.pointdofrango.estoque.EstoqueDtos.InsumoResponse;
 import com.pointdofrango.estoque.EstoqueDtos.MovimentacaoResponse;
 import com.pointdofrango.estoque.EstoqueDtos.ReposicaoResponse;
+import com.pointdofrango.estoque.EstoqueDtos.UltimaEntrada;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -42,6 +43,12 @@ public class InsumoController {
     public List<InsumoResponse> listar(Authentication auth) {
         boolean admin = admin(auth);
         return service.listar().stream().map(InsumoResponse::de).map(i -> admin ? i : i.semCustos()).toList();
+    }
+
+    @GetMapping("/ultimas-entradas")
+    @Operation(summary = "Última entrada de cada insumo nos últimos dias (o que acabou de chegar e de onde veio)")
+    public List<UltimaEntrada> ultimasEntradas() {
+        return service.ultimasEntradas(3);
     }
 
     @GetMapping("/reposicao")

@@ -12,6 +12,10 @@ import java.util.Optional;
 
 public interface InsumoRepository extends JpaRepository<Insumo, Long> {
 
+    @Query(value = "select case when exists (select 1 from ficha_tecnica_item where insumo_id = :id) then true else false end",
+            nativeQuery = true)
+    boolean usadoEmFichaTecnica(Long id);
+
     @EntityGraph(attributePaths = "embalagens")
     List<Insumo> findAllByOrderByNomeAsc();
 

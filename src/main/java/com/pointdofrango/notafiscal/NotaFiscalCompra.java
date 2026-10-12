@@ -77,6 +77,10 @@ public class NotaFiscalCompra {
         return numero;
     }
 
+    public Long getFornecedorId() {
+        return fornecedorId;
+    }
+
     public String getEmitenteNome() {
         return emitenteNome;
     }

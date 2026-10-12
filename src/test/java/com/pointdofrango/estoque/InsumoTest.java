@@ -29,6 +29,18 @@ class InsumoTest {
     }
 
     @Test
+    @DisplayName("Saldo com custo zero (nunca informado) passa a valer o preço da compra, sem puxar a média para baixo")
+    void custoZeroNaoDilui() {
+        Insumo cerveja = new Insumo("Original 269 ml", UnidadeMedida.UNIDADE, bd("0"), bd("0"));
+        cerveja.ajustarPara(bd("7")); // cadastrado pela contagem, sem custo
+
+        cerveja.darEntrada(bd("15"), bd("46.35"));
+
+        assertThat(cerveja.getEstoqueAtual()).isEqualByComparingTo("22");
+        assertThat(cerveja.getCustoUnitario()).isEqualByComparingTo("3.09");
+    }
+
+    @Test
     @DisplayName("Baixa reduz o saldo e não mexe no custo")
     void baixa() {
         Insumo i = frango();

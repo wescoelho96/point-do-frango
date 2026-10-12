@@ -393,3 +393,4 @@ tr.linha-dia td { background: var(--surface-2); border-top: 2px solid var(--bord
 
 /* Barra de menu do celular: a regra .brand acima (display: flex) anularia o display: none da media query. */
 @media (max-width: 860px) { .brand { display: none; } }
+td .sub.good { color: var(--good-text); }

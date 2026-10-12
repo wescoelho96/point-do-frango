@@ -23,6 +23,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -135,6 +136,17 @@ public class SaidaService {
     public Saida pagarContaFixa(Long despesaFixaId, BigDecimal valor, FormaPagamento forma, LocalDate data,
                                 String usuario) {
         return pagarContaFixa(despesaFixaId, valor, forma, data, null, usuario);
+    }
+
+    /** Pagamento lançado pela importação de uma compra (à vista ou parcelado), para desfazer junto com ela. */
+    @Transactional
+    public int removerDaCompra(Collection<String> descricoes, Instant desde, Instant ate, String usuario) {
+        List<Saida> daCompra = saidas.findByCriadoEmBetween(desde, ate).stream()
+                .filter(s -> descricoes.stream().anyMatch(d -> s.getDescricao().equals(d) || s.getDescricao().startsWith(d + " (")))
+                .toList();
+        saidas.deleteAll(daCompra);
+        log.info("{} saída(s) da compra desfeita removida(s) por {}", daCompra.size(), usuario);
+        return daCompra.size();
     }
 
     @Transactional

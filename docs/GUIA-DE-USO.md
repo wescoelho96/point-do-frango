@@ -320,6 +320,10 @@ Outros botões da linha: **Editar** (dados, embalagens, mínimo, ativo), o botã
 
 O sistema lembra as escolhas para a próxima compra do mesmo fornecedor. Para a foto do QR Code, enquadre só o código, de perto, reto e com boa luz.
 
+**O que chegou:** na coluna **Saldo**, cada item mostra a última entrada dos últimos 3 dias e de onde veio (por exemplo, "+15 un hoje · Cupom nº 7534"). Marque **Só o que chegou (3 dias)** para ver apenas esses itens.
+
+**Desfazer uma importação:** em **Compras importadas**, clique em **Desfazer** na compra que entrou errada. O estoque volta ao que era antes dela, o pagamento sai das saídas, os itens criados só por causa dela são apagados e a nota ou cupom pode ser importado de novo. Se algum item já foi usado depois da compra, ajuste pela **Contagem** antes de desfazer.
+
 ### Compra sem nota (cupom)
 
 Para compras com cupom do caixa, sem o XML da nota:

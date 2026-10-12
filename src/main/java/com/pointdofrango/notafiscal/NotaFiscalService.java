@@ -3,6 +3,7 @@ package com.pointdofrango.notafiscal;
 import com.pointdofrango.caixa.CaixaService;
 import com.pointdofrango.estoque.EstoqueDtos.EntradaRequest;
 import com.pointdofrango.estoque.EstoqueService;
+import com.pointdofrango.estoque.MovimentacaoEstoque;
 import com.pointdofrango.estoque.InsumoExcluido;
 import com.pointdofrango.financeiro.CategoriaSaida;
 import com.pointdofrango.financeiro.FormaPagamento;
@@ -12,6 +13,7 @@ import com.pointdofrango.notafiscal.LeitorNfe.Nota;
 import com.pointdofrango.saida.Fornecedor;
 import com.pointdofrango.saida.SaidaService;
 import com.pointdofrango.saida.SaidaService.NovaSaida;
+import com.pointdofrango.shared.RecursoNaoEncontradoException;
 import com.pointdofrango.shared.RegraDeNegocioException;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -23,10 +25,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -135,7 +141,7 @@ public class NotaFiscalService {
             }
             BigDecimal quantidade = item.quantidade().multiply(l.fator());
             estoque.registrarEntrada(l.insumoId(), new EntradaRequest(quantidade, null, null, item.valor(),
-                    "NF-e nº " + nota.numero() + " · " + nota.emitenteNome()), usuario);
+                    descricaoDaCompra(nota.chave(), nota.numero(), nota.emitenteNome())), usuario);
             lembrar(fornecedor.getId(), item, l);
             entradas++;
         }
@@ -144,7 +150,7 @@ public class NotaFiscalService {
         }
 
         if (pagamento != null) {
-            String descricao = "NF-e nº " + nota.numero() + " · " + nota.emitenteNome();
+            String descricao = descricaoDaCompra(nota.chave(), nota.numero(), nota.emitenteNome());
             if (pagamento.doCaixa()) {
                 caixa.registrarSaida(CategoriaSaida.INSUMOS, descricao, nota.valorTotal(), FormaPagamento.DINHEIRO, null,
                         fornecedor.getId(), usuario);
@@ -162,6 +168,54 @@ public class NotaFiscalService {
     @EventListener
     public void aoExcluirInsumo(InsumoExcluido evento) {
         itensFornecedor.deleteAll(itensFornecedor.findByInsumoId(evento.insumoId()));
+    }
+
+    public record Desfeita(int entradas, int insumosRemovidos, int saidasRemovidas) {
+    }
+
+    /** Aparece no extrato e nas saídas; modelo 65 na chave é cupom (NFC-e). */
+    static String descricaoDaCompra(String chave, String numero, String emitente) {
+        String tipo = chave != null && chave.length() == 44 && "65".equals(chave.substring(20, 22)) ? "Cupom" : "NF-e";
+        return tipo + " nº " + numero + " · " + emitente;
+    }
+
+    /**
+     * Desfaz uma importação: estorna as entradas no estoque, remove o pagamento lançado, apaga os insumos que só
+     * existiam por causa dela e esquece as ligações do fornecedor, para importar de novo do zero.
+     */
+    @Transactional
+    public Desfeita desfazer(Long id, String usuario) {
+        NotaFiscalCompra nota = notas.findById(id).orElseThrow(() -> new RecursoNaoEncontradoException("Nota", id));
+        // Importações antigas de cupom foram gravadas como "NF-e nº".
+        List<String> descricoes = List.of(descricaoDaCompra(nota.getChave(), nota.getNumero(), nota.getEmitenteNome()),
+                "NF-e nº " + nota.getNumero() + " · " + nota.getEmitenteNome());
+        Instant desde = nota.getImportadaEm().minus(Duration.ofMinutes(30));
+        Instant ate = nota.getImportadaEm().plus(Duration.ofMinutes(1));
+        String motivo = "Importação desfeita: " + descricoes.get(0);
+
+        Set<Long> movimentacoesDaCompra = new HashSet<>();
+        Set<Long> insumosTocados = new LinkedHashSet<>();
+        List<MovimentacaoEstoque> entradas = estoque.entradasDaCompra(descricoes, desde, ate);
+        for (MovimentacaoEstoque entrada : entradas) {
+            movimentacoesDaCompra.add(entrada.getId());
+            movimentacoesDaCompra.add(estoque.estornarEntrada(entrada.getId(), motivo, usuario));
+            insumosTocados.add(entrada.getInsumo().getId());
+        }
+        int saidasRemovidas = saidas.removerDaCompra(descricoes, desde, ate, usuario);
+        if (nota.getFornecedorId() != null) {
+            itensFornecedor.deleteAll(itensFornecedor.findByFornecedorId(nota.getFornecedorId()).stream()
+                    .filter(i -> insumosTocados.contains(i.getInsumoId())).toList());
+        }
+        int removidos = 0;
+        for (Long insumoId : insumosTocados) {
+            if (estoque.excluirSeSoDaCompra(insumoId, movimentacoesDaCompra)) {
+                removidos++;
+            }
+        }
+        notas.delete(nota);
+        log.info("Importação {} desfeita por {}: {} entrada(s), {} insumo(s) removido(s), {} saída(s)", nota.getChave(), usuario,
+                entradas.size(), removidos, saidasRemovidas);
+        return new Desfeita(entradas.size(), removidos, saidasRemovidas);
     }
 
     @Transactional(readOnly = true)

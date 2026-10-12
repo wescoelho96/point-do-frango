@@ -12,6 +12,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -85,6 +86,12 @@ public class NotaFiscalController {
             throw new RegraDeNegocioException("Envie o XML da nota ou o QR Code do cupom.");
         }
         return service.importar(req.xml(), req.url(), req.itens(), req.pagamento(), auth.getName());
+    }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Desfaz a importação: estorna o estoque, remove o pagamento e libera a nota para importar de novo")
+    public NotaFiscalService.Desfeita desfazer(@PathVariable Long id, Authentication auth) {
+        return service.desfazer(id, auth.getName());
     }
 
     @GetMapping

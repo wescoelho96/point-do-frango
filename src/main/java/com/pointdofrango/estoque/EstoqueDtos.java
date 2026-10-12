@@ -116,6 +116,10 @@ public final class EstoqueDtos {
         }
     }
 
+    /** O que chegou por último em cada insumo (origem = nota, cupom ou observação da entrada). */
+    public record UltimaEntrada(Long insumoId, Instant quando, BigDecimal quantidade, String origem) {
+    }
+
     /** Custo do que foi vendido desde a última compra: o dinheiro a guardar para repor o mesmo item. */
     public record ReposicaoResponse(Long insumoId, BigDecimal vendido, BigDecimal valor) {
     }

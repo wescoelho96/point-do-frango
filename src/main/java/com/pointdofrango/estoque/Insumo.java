@@ -223,11 +223,31 @@ public class Insumo {
         positivo(quantidade);
         naoNegativo(valorTotalCompra, "Valor da compra");
         BigDecimal saldoAnterior = estoqueAtual.max(BigDecimal.ZERO);
-        BigDecimal valorEmEstoque = saldoAnterior.multiply(custoUnitario);
+        // Custo zero é "nunca informado" (saldo cadastrado numa contagem): o que já havia passa a valer o preço desta compra.
+        BigDecimal custoDoSaldo = custoUnitario.signum() == 0
+                ? valorTotalCompra.divide(quantidade, ESCALA_CUSTO, Dinheiro.ARREDONDAMENTO) : custoUnitario;
+        BigDecimal valorEmEstoque = saldoAnterior.multiply(custoDoSaldo);
         BigDecimal novoSaldo = saldoAnterior.add(quantidade);
         custoUnitario = valorEmEstoque.add(valorTotalCompra)
                 .divide(novoSaldo, ESCALA_CUSTO, Dinheiro.ARREDONDAMENTO);
         estoqueAtual = estoqueAtual.add(quantidade);
+    }
+
+    /** Desfaz uma compra: tira a quantidade e o valor dela, voltando o custo médio ao que era sem ela. */
+    void estornarEntrada(BigDecimal quantidade, BigDecimal valorDaEntrada) {
+        positivo(quantidade);
+        if (!possui(quantidade)) {
+            throw new RegraDeNegocioException(nome + " já usou parte do que chegou nessa compra (saldo "
+                    + estoqueAtual.stripTrailingZeros().toPlainString() + "). Ajuste pela contagem antes de desfazer.");
+        }
+        BigDecimal valorRestante = estoqueAtual.multiply(custoUnitario).subtract(valorDaEntrada);
+        estoqueAtual = estoqueAtual.subtract(quantidade);
+        if (estoqueAtual.abs().compareTo(TOLERANCIA) < 0) {
+            estoqueAtual = BigDecimal.ZERO.setScale(ESCALA_QTD);
+        }
+        if (estoqueAtual.signum() > 0 && valorRestante.signum() > 0) {
+            custoUnitario = valorRestante.divide(estoqueAtual, ESCALA_CUSTO, Dinheiro.ARREDONDAMENTO);
+        }
     }
 
     /** Inventário. Retorna a diferença para o saldo anterior (negativa = perda). */

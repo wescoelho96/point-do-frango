@@ -5,9 +5,11 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 public interface MovimentacaoEstoqueRepository extends JpaRepository<MovimentacaoEstoque, Long> {
 
@@ -17,7 +19,29 @@ public interface MovimentacaoEstoqueRepository extends JpaRepository<Movimentaca
 
     boolean existsByInsumoIdAndTipoIn(Long insumoId, Collection<TipoMovimentacao> tipos);
 
-    @Modifying
+    @EntityGraph(attributePaths = "insumo")
+    List<MovimentacaoEstoque> findByTipoAndObservacaoInAndCriadoEmBetween(TipoMovimentacao tipo, Collection<String> observacoes,
+                                                                          Instant desde, Instant ate);
+
+    Optional<MovimentacaoEstoque> findFirstByInsumoIdAndIdLessThanOrderByIdDesc(Long insumoId, Long id);
+
+    @Query("select m.id from MovimentacaoEstoque m where m.insumo.id = :insumoId")
+    List<Long> idsDoInsumo(Long insumoId);
+
+    /** Última entrada de cada insumo, se for recente: o que acabou de chegar. */
+    @EntityGraph(attributePaths = "insumo")
+    @Query("select m from MovimentacaoEstoque m where m.criadoEm >= :desde and m.id in "
+            + "(select max(e.id) from MovimentacaoEstoque e where e.tipo = :tipo group by e.insumo.id)")
+    List<MovimentacaoEstoque> ultimasEntradas(TipoMovimentacao tipo, Instant desde);
+
+    /** Entradas da mesma origem depois do último estorno de importação do insumo (as desfeitas não contam). */
+    @Query("select coalesce(sum(m.quantidade), 0) from MovimentacaoEstoque m where m.insumo.id = :insumoId "
+            + "and m.tipo = com.pointdofrango.estoque.TipoMovimentacao.ENTRADA and m.observacao = :origem and m.criadoEm >= :desde "
+            + "and m.id > coalesce((select max(a.id) from MovimentacaoEstoque a where a.insumo.id = :insumoId "
+            + "and a.tipo = com.pointdofrango.estoque.TipoMovimentacao.AJUSTE and a.observacao like 'Importação desfeita%'), 0)")
+    BigDecimal somaEntradas(Long insumoId, String origem, Instant desde);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("delete from MovimentacaoEstoque m where m.insumo.id = :insumoId")
     void apagarDoInsumo(Long insumoId);
 
