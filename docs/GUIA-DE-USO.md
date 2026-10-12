@@ -310,8 +310,11 @@ Outros botões da linha: **Editar** (dados, embalagens, mínimo, ativo), o botã
    - **Nota fiscal (NF-e):** em **Arquivo XML da nota ou do cupom**, escolha o XML recebido por e-mail ou baixado no portal da nota fiscal.
 3. Opcionalmente, digite a **Chave de acesso da DANFE** (44 números) para conferir se a nota já foi importada.
 4. Confira os dados e os avisos: compra já importada, nota emitida para outro CNPJ ou compra diferente da chave digitada.
-5. Para cada item, escolha o **Insumo do estoque** correspondente, **+ Cadastrar como novo insumo** ou "não é estoque (ignorar)".
-6. Ajuste **Unid. em cada**: um fardo com 6 unidades = 6; produto vendido por kg = 1.
+5. Confira o que o sistema já preencheu em cada item, a partir da descrição:
+   - **Insumo do estoque:** o item já cadastrado que corresponde (mesma marca, sabor e tamanho), **+ Cadastrar como novo insumo** com nome, grupo e unidade sugeridos, ou "não é estoque (ignorar)" para itens como talco, sacola e produtos de limpeza.
+   - **Unid. em cada:** o pack ou a medida da embalagem ("15X269ML" = 15 latas, "C/50" = 50 unidades, "2KG" = 2 kg).
+   - **Entra:** a quantidade que vai para o estoque e o custo de cada unidade.
+6. Ajuste o que for preciso. No cupom, o desconto total é repartido entre os itens, para o estoque somar exatamente o valor pago.
 7. Escolha **Como foi pago**. Se o pagamento já foi lançado, use **Já lancei o pagamento (não lançar de novo)**.
 8. Clique em **Dar entrada no estoque**.
 

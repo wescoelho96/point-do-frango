@@ -1,85 +1,49 @@
 import { api } from '../api.js';
 import { campoParcelas, decimal, html, ligarParcelas, modal, moeda, numero, parcelasDe, toast } from '../ui.js';
+import { analisarItem, casarInsumo, fatorPara } from '../item-compra.js';
 
-const semAcento = (x) => String(x ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-const palavras = (x) => semAcento(x).split(/[^a-z0-9]+/).filter((p) => p.length >= 3);
-
-/** Primeiro palpite de insumo pelo nome: o que tiver mais palavras em comum com a descrição da nota. */
-function palpiteInsumo(descricao, insumos) {
-  const daNota = new Set(palavras(descricao));
-  let melhor = null;
-  let pontos = 1; // pelo menos 2 palavras em comum
-  insumos.forEach((i) => {
-    const p = palavras(`${i.nome} ${i.marca ?? ''}`).filter((w) => daNota.has(w)).length;
-    if (p > pontos) { melhor = i; pontos = p; }
-  });
-  return melhor;
-}
-
-/** "FD C/6", "CX 12UN", "PCT X 10": quantas unidades vêm em cada item da nota. */
-function palpiteFator(item, insumo) {
-  if (!insumo || insumo.sigla !== 'un') return 1;
-  const m = /(?:C\/|CX|FD|PCT|PC|X)\s*(\d{1,3})\s*(?:UN|UNID|U)?\b/i.exec(item.descricao);
-  return m ? Number(m[1]) : 1;
-}
+const semAcento = (x) => String(x ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 const NOVO = 'novo';
-const UNIDADES = {
-  kg: { unidade: 'QUILOGRAMA', sigla: 'kg' },
-  L: { unidade: 'LITRO', sigla: 'L' },
-  un: { unidade: 'UNIDADE', sigla: 'un' },
-};
+const SIGLA = { UNIDADE: 'un', QUILOGRAMA: 'kg', LITRO: 'L' };
+const GRUPOS_SUGERIDOS = ['Carnes', 'Congelados', 'Refrigerantes', 'Cervejas', 'Águas', 'Sucos', 'Óleos e molhos',
+  'Mercearia', 'Embalagens', 'Limpeza'];
 
-/** Item sem insumo cadastrado: unidade e conversão a partir da unidade e da descrição da nota ("2KG", "900ML"). */
-function palpiteNovo(item) {
-  if (/^KG/i.test(item.unidade)) return { ...UNIDADES.kg, fator: 1 };
-  const m = /(\d+(?:[.,]\d+)?)\s*(KG|G|LT|L|ML)\b/i.exec(item.descricao);
-  if (m) {
-    const valor = Number(m[1].replace(',', '.'));
-    const tipo = m[2].toUpperCase();
-    if (tipo === 'KG') return { ...UNIDADES.kg, fator: valor };
-    if (tipo === 'G') return { ...UNIDADES.kg, fator: valor / 1000 };
-    if (tipo === 'ML') return { ...UNIDADES.L, fator: valor / 1000 };
-    return { ...UNIDADES.L, fator: valor };
-  }
-  return { ...UNIDADES.un, fator: palpiteFator(item, UNIDADES.un) };
-}
-
-/** Conversão sugerida para um insumo existente: "2KG" vale para insumo em kg, "C/6" para insumo em unidades. */
-function fatorPara(item, insumo) {
-  const daNota = palpiteNovo(item);
-  return daNota.sigla === insumo.sigla && daNota.sigla !== 'un' ? daNota.fator : palpiteFator(item, insumo);
-}
-
-function nomeDoItem(descricao) {
-  return descricao.toLowerCase().replace(/(^|\s)\S/g, (l) => l.toUpperCase()).slice(0, 100);
-}
-
-/** Reaproveita o insumo de mesmo nome, se já existir; o custo vem da própria entrada da nota. */
-async function criarInsumo(item, insumos) {
-  const nome = nomeDoItem(item.descricao);
+/** Cria o insumo novo com o nome, grupo e unidade da linha; reaproveita se já existir com o mesmo nome. */
+async function criarInsumo({ nome, grupo, unidade }, insumos) {
   const existente = insumos.find((i) => semAcento(i.nome) === semAcento(nome));
   if (existente) return existente.id;
-  const { unidade } = palpiteNovo(item);
-  const criado = await api.post('/insumos', { nome, unidade, estoqueMinimo: 0, custoUnitario: 0, estoqueInicial: 0 });
+  const criado = await api.post('/insumos', {
+    nome, unidade, grupo: grupo?.trim() || null, estoqueMinimo: 0, custoUnitario: 0, estoqueInicial: 0,
+  });
   insumos.push(criado);
   return criado.id;
 }
 
 function linhaItem(previa, insumos) {
   return previa.itens.map(({ item, insumoSugerido, fatorSugerido }) => {
-    const insumo = insumos.find((i) => i.id === insumoSugerido) ?? palpiteInsumo(item.descricao, insumos);
-    const fator = fatorSugerido ?? (insumo ? fatorPara(item, insumo) : palpiteNovo(item).fator);
+    const a = analisarItem(item.descricao, item.unidade);
+    const insumo = insumos.find((i) => i.id === insumoSugerido) ?? casarInsumo(item.descricao, insumos);
+    const escolha = insumo ? String(insumo.id) : (a.ignorar ? '' : NOVO);
+    const fator = fatorSugerido ?? (insumo ? fatorPara(item.descricao, item.unidade, insumo) : a.fator);
     return html`
       <tr data-item="${item.numero}">
         <td>${item.descricao}<div class="muted" style="font-size:.78rem">${numero(item.quantidade)} ${item.unidade} · ${moeda(item.valor)}
+          ${a.grupo ? html` · <span class="badge">${a.grupo}</span>` : ''}
           ${insumoSugerido ? html` · <span class="badge badge-good">lembrado da última compra</span>` : ''}</div></td>
         <td><select name="insumo-${item.numero}" aria-label="Insumo do item ${item.numero}">
-          <option value="">— não é estoque (ignorar) —</option>
-          <option value="${NOVO}" ${insumo ? '' : 'selected'}>+ Cadastrar como novo insumo</option>
-          ${insumos.filter((i) => i.ativo).map((i) => html`<option value="${i.id}" ${insumo?.id === i.id ? 'selected' : ''}>${i.nome}</option>`)}
-        </select></td>
-        <td style="width:120px"><input name="fator-${item.numero}" inputmode="decimal" value="${String(fator).replace('.', ',')}"
+            <option value="" ${escolha === '' ? 'selected' : ''}>— não é estoque (ignorar) —</option>
+            <option value="${NOVO}" ${escolha === NOVO ? 'selected' : ''}>+ Cadastrar como novo insumo</option>
+            ${insumos.filter((i) => i.ativo).map((i) => html`<option value="${i.id}" ${escolha === String(i.id) ? 'selected' : ''}>${i.nome}</option>`)}
+          </select>
+          <div class="form-grid ${escolha === NOVO ? '' : 'hidden'}" data-novo="${item.numero}" style="margin-top:6px;gap:6px">
+            <input name="nome-${item.numero}" maxlength="100" value="${a.nome}" aria-label="Nome do novo insumo" title="Nome do novo insumo">
+            <input name="grupo-${item.numero}" maxlength="40" value="${a.grupo ?? ''}" list="grupos-compra" placeholder="Grupo" aria-label="Grupo">
+            <select name="unidade-${item.numero}" aria-label="Controlar estoque em">
+              ${Object.entries(SIGLA).map(([u, s]) => html`<option value="${u}" ${a.unidade === u ? 'selected' : ''}>em ${s}</option>`)}
+            </select>
+          </div></td>
+        <td style="width:110px"><input name="fator-${item.numero}" inputmode="decimal" value="${String(fator).replace('.', ',')}"
           aria-label="Quantas unidades em cada" title="Quantas unidades do insumo vêm em 1 ${item.unidade} da nota"></td>
         <td class="num right muted" data-entra="${item.numero}"></td>
       </tr>`;
@@ -172,22 +136,27 @@ export function abrirImportacao(insumos, aoImportar) {
 
       const atualizarEntradas = () => previa?.itens.forEach(({ item }) => {
         const escolha = form[`insumo-${item.numero}`].value;
-        const insumo = escolha === NOVO ? palpiteNovo(item) : insumos.find((i) => i.id === Number(escolha));
-        const fator = decimal(form[`fator-${item.numero}`].value) || 0;
+        const sigla = escolha === NOVO ? SIGLA[form[`unidade-${item.numero}`].value]
+          : insumos.find((i) => i.id === Number(escolha))?.sigla;
+        const quantidade = item.quantidade * (decimal(form[`fator-${item.numero}`].value) || 0);
         const entra = form.querySelector(`[data-entra="${item.numero}"]`);
-        if (!insumo) { entra.textContent = 'ignorado'; return; }
-        entra.textContent = `${escolha === NOVO ? 'novo · ' : ''}entra ${numero(item.quantidade * fator)} ${insumo.sigla}`;
+        if (!sigla) { entra.textContent = 'ignorado'; return; }
+        entra.textContent = `${escolha === NOVO ? 'novo · ' : ''}${numero(quantidade)} ${sigla}`
+          + (quantidade ? ` · ${moeda(item.valor / quantidade)}/${sigla}` : '');
       });
 
-      // Ao trocar o insumo, a conversão sugerida acompanha a unidade dele.
+      // Trocar o insumo (ou a unidade do novo) recalcula quantas unidades entram por item da nota.
       form.addEventListener('change', (ev) => {
-        const numeroItem = /^insumo-(\d+)$/.exec(ev.target.name ?? '')?.[1];
+        const [, campo, numeroItem] = /^(insumo|unidade)-(\d+)$/.exec(ev.target.name ?? '') ?? [];
         const linha = numeroItem && previa?.itens.find(({ item }) => String(item.numero) === numeroItem);
         if (!linha) return;
-        const escolha = ev.target.value;
+        const { item } = linha;
+        const escolha = form[`insumo-${numeroItem}`].value;
+        form.querySelector(`[data-novo="${numeroItem}"]`).classList.toggle('hidden', escolha !== NOVO);
         const existente = insumos.find((i) => i.id === Number(escolha));
-        const fator = escolha === NOVO ? palpiteNovo(linha.item).fator : existente ? fatorPara(linha.item, existente) : 1;
-        form[`fator-${numeroItem}`].value = String(fator).replace('.', ',');
+        const sigla = escolha === NOVO ? SIGLA[form[`unidade-${numeroItem}`].value] : existente?.sigla;
+        const fator = sigla ? fatorPara(item.descricao, item.unidade, { sigla }) : 1;
+        if (campo === 'insumo' || campo === 'unidade') form[`fator-${numeroItem}`].value = String(fator).replace('.', ',');
       });
 
       const exibirPrevia = (tipo) => {
@@ -199,10 +168,12 @@ export function abrirImportacao(insumos, aoImportar) {
           ${previa.paraOutroCnpj ? html`<div class="bad">⚠️ A nota foi emitida para outro CNPJ, não o da loja (Config. → Loja).</div>` : ''}
           ${chaveDigitada.length === 44 && chaveDigitada !== n.chave ? html`<div class="bad">⚠️ A compra lida é de outra nota, não da chave digitada.</div>` : ''}`);
         form.querySelector('[data-itens]').innerHTML = String(html`
-          <table><thead><tr><th>Item</th><th>Insumo do estoque</th><th>Unid. em cada</th><th></th></tr></thead>
+          <table><thead><tr><th>Item</th><th>Insumo do estoque</th><th>Unid. em cada</th><th>Entra</th></tr></thead>
             <tbody>${linhaItem(previa, insumos)}</tbody></table>
-          <p class="muted" style="margin:6px 0 0;font-size:.8rem">"Unid. em cada": um fardo com 6 Cocas = 6; produto vendido por kg = 1.
-            O sistema lembra a escolha para a próxima compra deste fornecedor.</p>`);
+          <datalist id="grupos-compra">${GRUPOS_SUGERIDOS.map((g) => html`<option value="${g}">`)}</datalist>
+          <p class="muted" style="margin:6px 0 0;font-size:.8rem">Grupo, pack e medida saem da descrição: "15X269ML" = 15 unidades,
+            "C/50" = 50, "2KG" = 2 kg. Confira a coluna <strong>Entra</strong> (quantidade e custo de cada unidade).
+            O sistema lembra as escolhas para a próxima compra deste fornecedor.</p>`);
         form.querySelector('[data-pagamento]').classList.remove('hidden');
         atualizarEntradas();
       };
@@ -269,7 +240,9 @@ export function abrirImportacao(insumos, aoImportar) {
       for (const { item } of previa.itens) {
         let insumoId = d[`insumo-${item.numero}`] ? Number(d[`insumo-${item.numero}`]) : null;
         if (d[`insumo-${item.numero}`] === NOVO) {
-          insumoId = await criarInsumo(item, insumos);
+          const nome = d[`nome-${item.numero}`]?.trim();
+          if (!nome) throw new Error(`Dê um nome ao novo insumo do item ${item.numero} (${item.descricao}).`);
+          insumoId = await criarInsumo({ nome, grupo: d[`grupo-${item.numero}`], unidade: d[`unidade-${item.numero}`] }, insumos);
         }
         itens.push({ numero: item.numero, insumoId, fator: decimal(d[`fator-${item.numero}`]) });
       }
