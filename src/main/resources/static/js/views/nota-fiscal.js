@@ -108,15 +108,23 @@ async function lerQrCode(arquivo) {
     } catch { /* segue para o jsQR */ }
   }
   const jsQR = await carregarLeitorQr();
-  for (const lado of [1600, 1000, 2400]) {
-    const escala = Math.min(1, lado / Math.max(imagem.width, imagem.height));
-    const largura = Math.round(imagem.width * escala);
-    const altura = Math.round(imagem.height * escala);
+  const W = imagem.width;
+  const H = imagem.height;
+  // Cupom térmico sai "granulado": reduzir a foto suaviza o ruído, por isso os tamanhos menores vêm primeiro.
+  // Depois tenta recortes, para QR Code pequeno numa foto do cupom inteiro.
+  const tentativas = [
+    ...[600, 500, 700, 800, 450, 1000, 1300, 1600].map((lado) => [0, 0, W, H, lado]),
+    ...[600, 800, 1000].flatMap((lado) => [[0, H * 0.4, W, H * 0.6, lado], [0, 0, W, H * 0.6, lado], [W * 0.15, H * 0.2, W * 0.7, H * 0.6, lado]]),
+  ];
+  for (const [sx, sy, sw, sh, lado] of tentativas) {
+    const escala = Math.min(1, lado / Math.max(sw, sh));
+    const largura = Math.round(sw * escala);
+    const altura = Math.round(sh * escala);
     const tela = document.createElement('canvas');
     tela.width = largura;
     tela.height = altura;
     const ctx = tela.getContext('2d', { willReadFrequently: true });
-    ctx.drawImage(imagem, 0, 0, largura, altura);
+    ctx.drawImage(imagem, sx, sy, sw, sh, 0, 0, largura, altura);
     const lido = jsQR(ctx.getImageData(0, 0, largura, altura).data, largura, altura, { inversionAttempts: 'attemptBoth' });
     if (lido?.data) return lido.data;
   }
@@ -135,8 +143,8 @@ export function abrirImportacao(insumos, aoImportar) {
       <p class="text-2" style="margin:0"><strong>Cupom (NFC-e):</strong> fotografe o QR Code e os itens vêm da SEFAZ.
         <strong>Nota (NF-e):</strong> escolha o arquivo XML que chega no e-mail do CNPJ. Sem nenhum dos dois, use <strong>Compra sem nota</strong>.</p>
       <div class="form-grid">
-        <label class="field">📷 Foto do QR Code do cupom
-          <input name="foto" type="file" accept="image/*" capture="environment"></label>
+        <label class="field">📷 Foto do QR Code do cupom (câmera ou galeria)
+          <input name="foto" type="file" accept="image/*"></label>
         <label class="field">Arquivo XML da nota ou do cupom
           <input name="arquivo" type="file" accept=".xml,text/xml,application/xml"></label>
         <label class="field" style="grid-column:1/-1">Ou cole o link do QR Code

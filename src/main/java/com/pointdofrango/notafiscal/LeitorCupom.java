@@ -5,6 +5,11 @@ import com.pointdofrango.notafiscal.LeitorNfe.Nota;
 import com.pointdofrango.shared.RegraDeNegocioException;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.Charset;
+import java.nio.charset.CodingErrorAction;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -25,10 +30,10 @@ public final class LeitorCupom {
 
     private static final Pattern CHAVE_NA_URL = Pattern.compile("(?:^|[?&])p=(\\d{44})");
     private static final Pattern ITEM = Pattern.compile(
-            "^(.+?)\\s*\\(\\s*C[óo]digo:\\s*([^)]*?)\\s*\\)\\s*Qtde\\.?:\\s*([\\d.,]+)\\s*UN:\\s*(\\S+)\\s*"
+            "^(.+?)\\s*\\(\\s*C\\S{1,2}digo:\\s*([^)]*?)\\s*\\)\\s*Qtde\\.?:\\s*([\\d.,]+)\\s*UN:\\s*(\\S+)\\s*"
                     + "Vl\\.\\s*Unit\\.?:\\s*([\\d.,]+)\\s*Vl\\.\\s*Total\\s*([\\d.,]+)", Pattern.CASE_INSENSITIVE);
     private static final Pattern TOTAL = Pattern.compile("Valor a pagar R\\$:?\\s*([\\d.,]+)", Pattern.CASE_INSENSITIVE);
-    private static final Pattern EMISSAO = Pattern.compile("Emiss[ãa]o:\\s*(\\d{2}/\\d{2}/\\d{4}\\s+\\d{2}:\\d{2}:\\d{2})");
+    private static final Pattern EMISSAO = Pattern.compile("Emiss\\S{1,2}o:\\s*(\\d{2}/\\d{2}/\\d{4}\\s+\\d{2}:\\d{2}:\\d{2})");
     private static final Pattern EMITENTE = Pattern.compile("id=\"u20\"[^>]*>([^<]+)<");
     private static final DateTimeFormatter DATA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
 
@@ -83,6 +88,7 @@ public final class LeitorCupom {
         Matcher total = TOTAL.matcher(pagina);
         BigDecimal valorTotal = total.find() ? numero(total.group(1))
                 : itens.stream().map(Item::valor).reduce(BigDecimal.ZERO, BigDecimal::add);
+        itens = comDescontoRateado(itens, valorTotal);
         Matcher emissao = EMISSAO.matcher(pagina);
         OffsetDateTime emitidaEm = emissao.find()
                 ? LocalDateTime.parse(emissao.group(1).replaceAll("\\s+", " "), DATA).atZone(zona).toOffsetDateTime()
@@ -93,13 +99,47 @@ public final class LeitorCupom {
                 valorTotal, itens);
     }
 
+    /**
+     * A página mostra o valor cheio de cada item e só o desconto total do cupom. O desconto é rateado
+     * pelo valor dos itens, para o custo do estoque bater com o que foi pago; o último item absorve os centavos.
+     */
+    static List<Item> comDescontoRateado(List<Item> itens, BigDecimal valorPago) {
+        BigDecimal soma = itens.stream().map(Item::valor).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (soma.signum() == 0 || soma.compareTo(valorPago) == 0) {
+            return itens;
+        }
+        List<Item> ajustados = new ArrayList<>();
+        BigDecimal acumulado = BigDecimal.ZERO;
+        for (int i = 0; i < itens.size(); i++) {
+            Item item = itens.get(i);
+            BigDecimal valor = i == itens.size() - 1 ? valorPago.subtract(acumulado)
+                    : item.valor().multiply(valorPago).divide(soma, 2, RoundingMode.HALF_EVEN);
+            acumulado = acumulado.add(valor);
+            ajustados.add(new Item(item.numero(), item.codigo(), item.ean(), item.descricao(), item.ncm(), item.unidade(),
+                    item.quantidade(), item.valorUnitario(), valor));
+        }
+        return ajustados;
+    }
+
     private static String texto(String html) {
         return limpar(html.replaceAll("(?s)<script.*?</script>", " ").replaceAll("<[^>]+>", " "));
     }
 
     private static String limpar(String texto) {
-        return texto.replace("&nbsp;", " ").replace("&amp;", "&").replace("&quot;", "\"").replace("&#39;", "'")
+        return texto.replace("&nbsp;", " ").replace('\u00A0', ' ').replace("&amp;", "&").replace("&quot;", "\"").replace("&#39;", "'")
                 .replace("&lt;", "<").replace("&gt;", ">").replaceAll("\\s+", " ").trim();
+    }
+
+    /** As SEFAZ respondem em UTF-8 ou ISO-8859-1, nem sempre declarado no cabeçalho. */
+    public static String decodificar(byte[] bytes) {
+        try {
+            return StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(bytes)).toString();
+        } catch (CharacterCodingException e) {
+            return new String(bytes, Charset.forName("windows-1252"));
+        }
     }
 
     /** "1.234,56" ou "0,732" no formato brasileiro. */

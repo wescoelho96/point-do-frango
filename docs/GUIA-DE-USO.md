@@ -306,7 +306,7 @@ Outros botões da linha: **Editar** (dados, embalagens, mínimo, ativo), o botã
 
 1. Em **Estoque**, clique em **Importar nota ou cupom**.
 2. Escolha a origem da compra:
-   - **Cupom com QR Code (NFC-e):** em **Foto do QR Code do cupom**, fotografe o QR Code (no celular, a câmera abre direto). Os itens são buscados na SEFAZ. Também é possível colar o link do QR Code.
+   - **Cupom com QR Code (NFC-e):** em **Foto do QR Code do cupom**, tire a foto do QR Code ou escolha uma foto da galeria. Os itens são buscados na SEFAZ. Também é possível colar o link do QR Code.
    - **Nota fiscal (NF-e):** em **Arquivo XML da nota ou do cupom**, escolha o XML recebido por e-mail ou baixado no portal da nota fiscal.
 3. Opcionalmente, digite a **Chave de acesso da DANFE** (44 números) para conferir se a nota já foi importada.
 4. Confira os dados e os avisos: compra já importada, nota emitida para outro CNPJ ou compra diferente da chave digitada.

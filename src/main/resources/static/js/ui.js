@@ -20,6 +20,21 @@ export function html(partes, ...valores) {
 
 export function renderizar(el, conteudo) { el.innerHTML = String(conteudo); }
 
+/** No celular as tabelas viram cartões; cada célula leva o título da coluna (CSS: td::before). */
+export function rotularTabelas(raiz = document) {
+  raiz.querySelectorAll('table').forEach((tabela) => {
+    const titulos = [...tabela.querySelectorAll('thead th')].map((th) => th.textContent.trim());
+    if (!titulos.length) return;
+    tabela.querySelectorAll('tbody tr').forEach((tr) => {
+      let coluna = 0;
+      [...tr.children].forEach((td) => {
+        if (td.colSpan <= 1 && !td.hasAttribute('data-label') && titulos[coluna]) td.setAttribute('data-label', titulos[coluna]);
+        coluna += Number(td.colSpan) || 1;
+      });
+    });
+  });
+}
+
 // ---------- Formatação ----------
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 export const moeda = (v) => BRL.format(Number(v ?? 0));

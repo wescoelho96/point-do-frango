@@ -136,30 +136,29 @@ export async function montar(container) {
               ? `${numero(i.unidadeUsoPorUnidade, 2)} ${plural(i.unidadeUsoNome, 2)}/${i.sigla}` : ''}</div>` : ''}</td>
         <td class="num right">${numero(i.estoqueAtual)} ${i.sigla}
           ${i.ativo && i.abaixoDoMinimo ? html` <span class="badge badge-bad">⚠ repor</span>` : ''}
-          ${equivalencias(i) ? html`<div class="muted" style="font-size:.78rem">${equivalencias(i)}</div>` : ''}</td>
-        <td class="num right muted">${numero(i.estoqueMinimo)} ${i.sigla}</td>
+          <div class="sub">mín. ${numero(i.estoqueMinimo)} ${i.sigla}${equivalencias(i) ? ` · ${equivalencias(i)}` : ''}</div></td>
         ${admin ? colunasDeCusto(i) : ''}
-        <td class="right" style="white-space:nowrap">
+        <td class="right acoes">
           ${admin ? html`
-            <button class="btn btn-sm" data-acao="entrada" data-id="${i.id}">📥 Entrada</button>
-            <button class="btn btn-sm" data-acao="ajuste" data-id="${i.id}">📋 Contagem</button>
+            <button class="btn btn-sm" data-acao="entrada" data-id="${i.id}" title="Registrar compra">📥 Entrada</button>
             <button class="btn btn-sm" data-acao="editar" data-id="${i.id}">Editar</button>
-            <button class="btn btn-sm" data-acao="duplicar" data-id="${i.id}" title="Criar outro parecido (outro sabor ou tamanho)">⧉</button>` : ''}
-          <button class="btn btn-sm" data-acao="rendimento" data-id="${i.id}">📊 Rende</button>
-          <button class="btn btn-sm" data-acao="extrato" data-id="${i.id}">Extrato</button>
+            <button class="btn btn-sm btn-icon" data-acao="ajuste" data-id="${i.id}" title="Contagem (inventário)" aria-label="Contagem">📋</button>
+            <button class="btn btn-sm btn-icon" data-acao="duplicar" data-id="${i.id}" title="Criar outro parecido (outro sabor ou tamanho)" aria-label="Duplicar">⧉</button>` : ''}
+          <button class="btn btn-sm btn-icon" data-acao="rendimento" data-id="${i.id}" title="Quanto rende" aria-label="Quanto rende">📊</button>
+          <button class="btn btn-sm btn-icon" data-acao="extrato" data-id="${i.id}" title="Extrato" aria-label="Extrato">🧾</button>
         </td>
       </tr>`;
   }
 
   function desenharTabela() {
     const lista = filtrados();
-    const colunas = admin ? 8 : 4;
+    const colunas = admin ? 6 : 3;
     const porGrupo = grupos().map((g) => [g, lista.filter((i) => (i.grupo || SEM_GRUPO) === g)]).filter(([, l]) => l.length);
     renderizar(container.querySelector('[data-tabela]'), lista.length ? html`
       <table>
         <thead><tr>
-          <th>Insumo</th><th class="right">Saldo</th><th class="right">Mínimo</th>
-          ${admin ? html`<th class="right">Custo médio</th><th class="right">Valor em estoque</th>
+          <th>Insumo</th><th class="right">Saldo</th>
+          ${admin ? html`<th class="right">Custo médio</th>
             <th class="right" title="Quanto sobra de lucro para cada kg/un deste insumo que vira produto">Lucro por kg / un</th>
             <th class="right" title="Custo do que foi vendido desde a última compra deste item. Zera ao registrar uma nova entrada.">Separar p/ repor</th>` : ''}<th></th>
         </tr></thead>
@@ -177,10 +176,9 @@ export async function montar(container) {
   function colunasDeCusto(i) {
     const margens = margensDoInsumo(i, produtos).filter((m) => m.principal);
     return html`
-      <td class="num right">${moeda(i.custoUnitario)}/${i.sigla}</td>
-      <td class="num right">${moeda(i.valorEmEstoque)}</td>
+      <td class="num right">${moeda(i.custoUnitario)}/${i.sigla}<div class="sub">${moeda(i.valorEmEstoque)} em estoque</div></td>
       <td class="num right">${margens.length ? html`<strong class="${margens.some((m) => m.lucro < 0) ? 'bad' : ''}">${faixa(margens, 'lucroPorUnidade')}</strong>/${i.sigla}
-        <div class="muted" style="font-size:.78rem">margem ${faixaPct(margens)} · ${margens.length} produto(s) · estoque rende ${faixa(margens.map((m) => ({ v: m.porcoesNoEstoque * m.lucro })), 'v')}</div>`
+        <div class="sub" title="${margens.length} produto(s) usam este insumo">margem ${faixaPct(margens)} · estoque rende ${faixa(margens.map((m) => ({ v: m.porcoesNoEstoque * m.lucro })), 'v')}</div>`
         : html`<span class="muted" title="Não é o ingrediente principal de nenhum produto">—</span>`}</td>
       ${celulaReposicao(i)}`;
   }
@@ -188,7 +186,7 @@ export async function montar(container) {
   function celulaReposicao(i) {
     const r = reposicao.get(i.id);
     return html`<td class="num right">${r ? html`<strong>${moeda(r.valor)}</strong>
-      <div class="muted" style="font-size:.78rem">${numero(r.vendido)} ${i.sigla} em vendas desde a última compra</div>`
+      <div class="sub" title="Vendido desde a última compra deste item">${numero(r.vendido)} ${i.sigla} vendidos</div>`
       : html`<span class="muted">—</span>`}</td>`;
   }
 

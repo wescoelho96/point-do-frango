@@ -1,5 +1,5 @@
 import { api, sessao, quandoSessaoExpirar } from './api.js';
-import { rotulo, toast, toastErro } from './ui.js';
+import { rotularTabelas, rotulo, toast, toastErro } from './ui.js';
 import { conectar, desconectar, liberarAudio } from './tempo-real.js';
 import { dadosLoja } from './imprimir.js';
 import * as pdv from './views/pdv.js';
@@ -186,6 +186,14 @@ $('btn-instalar').addEventListener('click', async () => {
   $('btn-instalar').classList.add('hidden');
 });
 window.addEventListener('appinstalled', () => $('btn-instalar').classList.add('hidden'));
+
+// Telas e modais trocam o HTML a todo momento: rotula as tabelas novas uma vez por quadro.
+let rotulando = false;
+new MutationObserver(() => {
+  if (rotulando) return;
+  rotulando = true;
+  requestAnimationFrame(() => { rotulando = false; rotularTabelas(); });
+}).observe(document.body, { childList: true, subtree: true });
 
 const s = sessao.get();
 if (s && new Date(s.expiraEm) > new Date()) mostrarApp(); else { sessao.limpar(); mostrarLogin(); }

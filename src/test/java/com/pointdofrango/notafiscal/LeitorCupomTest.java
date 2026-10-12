@@ -6,7 +6,9 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigDecimal;
 import java.net.URI;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.ZoneId;
 
@@ -53,6 +55,34 @@ class LeitorCupomTest {
         assertThat(cebola.unidade()).isEqualTo("KG");
         assertThat(cebola.quantidade()).isEqualByComparingTo("1.235");
         assertThat(cebola.valor()).isEqualByComparingTo("6.16");
+    }
+
+    @Test
+    @DisplayName("Página em ISO-8859-1, com espaço não separável e código do produto quebrado em linhas")
+    void paginaComoASefazEnvia() throws IOException {
+        String html = pagina().replace("&nbsp;", " ").replace("(Código: 12 )", "(Código:\n\t\t\t12\n\t\t\t)");
+        byte[] latin1 = html.getBytes(Charset.forName("windows-1252"));
+
+        var nota = LeitorCupom.ler(qrCode(), LeitorCupom.decodificar(latin1), SP);
+
+        assertThat(nota.itens()).hasSize(3);
+        assertThat(nota.itens().get(2).codigo()).isEqualTo("12");
+        assertThat(nota.itens().get(0).valorUnitario()).isEqualByComparingTo("8.49");
+        assertThat(nota.emitidaEm().toLocalDateTime().toString()).isEqualTo("2026-10-08T14:28:44");
+    }
+
+    @Test
+    @DisplayName("Desconto do cupom é rateado entre os itens e a soma fecha com o valor pago")
+    void descontoRateado() throws IOException {
+        String comDesconto = pagina().replace("<span class=\"totalNumb txtMax\">131,80</span>",
+                "<span class=\"totalNumb txtMax\">121,80</span>");
+
+        var nota = LeitorCupom.ler(qrCode(), comDesconto, SP);
+
+        assertThat(nota.valorTotal()).isEqualByComparingTo("121.80");
+        assertThat(nota.itens().stream().map(LeitorNfe.Item::valor).reduce(BigDecimal.ZERO, BigDecimal::add))
+                .isEqualByComparingTo("121.80");
+        assertThat(nota.itens().get(0).valor()).isEqualByComparingTo("47.08"); // 50,94 × 121,80 / 131,80
     }
 
     @Test

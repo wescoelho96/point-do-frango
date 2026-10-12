@@ -12,7 +12,6 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.ZoneId;
 
@@ -49,7 +48,7 @@ public class ConsultaNfce {
             }
             try (InputStream corpo = resp.body()) {
                 byte[] bytes = corpo.readNBytes(MAX_BYTES);
-                return LeitorCupom.ler(uri, new String(bytes, StandardCharsets.UTF_8), zona);
+                return LeitorCupom.ler(uri, LeitorCupom.decodificar(bytes), zona);
             }
         } catch (IOException e) {
             log.warn("Consulta de NFC-e falhou em {}: {}", uri.getHost(), e.toString());
