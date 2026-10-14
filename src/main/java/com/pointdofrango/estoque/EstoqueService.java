@@ -3,6 +3,8 @@ package com.pointdofrango.estoque;
 import com.pointdofrango.estoque.EstoqueDtos.AjusteRequest;
 import com.pointdofrango.estoque.EstoqueDtos.CompraRequest;
 import com.pointdofrango.estoque.EstoqueDtos.CompraResponse;
+import com.pointdofrango.estoque.EstoqueDtos.ContagemRequest;
+import com.pointdofrango.estoque.EstoqueDtos.ItemContado;
 import com.pointdofrango.estoque.EstoqueDtos.ItemCompra;
 import com.pointdofrango.estoque.EstoqueDtos.EntradaRequest;
 import com.pointdofrango.estoque.EstoqueDtos.InsumoRequest;
@@ -34,13 +36,15 @@ public class EstoqueService {
 
     private final InsumoRepository insumos;
     private final MovimentacaoEstoqueRepository movimentacoes;
+    private final LoteValidadeRepository lotes;
     private final Clock clock;
     private final ApplicationEventPublisher eventos;
 
-    public EstoqueService(InsumoRepository insumos, MovimentacaoEstoqueRepository movimentacoes, Clock clock,
-                          ApplicationEventPublisher eventos) {
+    public EstoqueService(InsumoRepository insumos, MovimentacaoEstoqueRepository movimentacoes,
+                          LoteValidadeRepository lotes, Clock clock, ApplicationEventPublisher eventos) {
         this.insumos = insumos;
         this.movimentacoes = movimentacoes;
+        this.lotes = lotes;
         this.clock = clock;
         this.eventos = eventos;
     }
@@ -64,6 +68,7 @@ public class EstoqueService {
         novo.definirUnidadeUso(req.unidadeUsoNome(), req.unidadeUsoPorUnidade());
         novo.definirEmbalagens(dadosEmbalagens(req));
         novo.classificar(req.grupo(), req.marca());
+        novo.guardarEm(req.local());
         Insumo insumo = insumos.save(novo);
         BigDecimal inicial = req.estoqueInicial();
         if (inicial != null && inicial.signum() > 0) {
@@ -79,6 +84,7 @@ public class EstoqueService {
         insumo.atualizarCadastro(req.nome(), req.unidade(), req.estoqueMinimo(), req.custoUnitario());
         insumo.definirUnidadeUso(req.unidadeUsoNome(), req.unidadeUsoPorUnidade());
         insumo.classificar(req.grupo(), req.marca());
+        insumo.guardarEm(req.local());
         Set<Long> removidas = insumo.definirEmbalagens(dadosEmbalagens(req));
         // Produtos recalcula as fichas na mesma transação: ficha inválida desfaz a alteração.
         eventos.publishEvent(new InsumoConversaoAlterada(insumo.getId(), removidas));
@@ -203,7 +209,7 @@ public class EstoqueService {
         List<ItemCompra> itens = req.itens().stream().sorted(Comparator.comparing(ItemCompra::insumoId)).toList();
         for (ItemCompra item : itens) {
             registrarEntrada(item.insumoId(), new EntradaRequest(item.quantidade(), item.embalagemId(),
-                    item.quantidadeEmbalagens(), item.valorTotal(), observacao), usuario);
+                    item.quantidadeEmbalagens(), item.valorTotal(), observacao, null, item.validade()), usuario);
             total = total.add(item.valorTotal());
         }
         if (req.pagamento() != null && total.signum() > 0) {
@@ -233,12 +239,29 @@ public class EstoqueService {
         }
         insumo.darEntrada(quantidade, req.valorTotal());
         registrar(insumo, TipoMovimentacao.ENTRADA, quantidade, null, observacao, usuario);
+        if (req.validade() != null) {
+            lotes.save(new LoteValidade(insumo.getId(), quantidade, req.validade(), usuario, Instant.now(clock)));
+        }
         if (req.pagamento() != null && req.valorTotal().signum() > 0) {
             String qtd = quantidade.stripTrailingZeros().toPlainString() + " " + insumo.getUnidade().getSigla();
             eventos.publishEvent(new CompraDeInsumoPaga("Compra: " + qtd + " de " + insumo.getNome(), req.valorTotal(),
                     req.pagamento(), usuario));
         }
         return comEmbalagens(insumo);
+    }
+
+    /** Contagem de vários itens de uma vez (um freezer, a geladeira): só gera ajuste onde o contado difere. */
+    @Transactional
+    public int registrarContagem(ContagemRequest req, String usuario) {
+        int ajustados = 0;
+        for (ItemContado item : req.itens()) {
+            Insumo insumo = buscar(item.insumoId());
+            if (insumo.getEstoqueAtual().compareTo(item.quantidadeContada()) != 0) {
+                registrarAjuste(item.insumoId(), new AjusteRequest(item.quantidadeContada(), req.motivo()), usuario);
+                ajustados++;
+            }
+        }
+        return ajustados;
     }
 
     @Transactional

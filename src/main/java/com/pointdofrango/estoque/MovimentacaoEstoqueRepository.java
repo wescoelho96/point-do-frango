@@ -32,6 +32,26 @@ public interface MovimentacaoEstoqueRepository extends JpaRepository<Movimentaca
     @Query("select m.id from MovimentacaoEstoque m where m.insumo.id = :insumoId")
     List<Long> idsDoInsumo(Long insumoId);
 
+    /** [insumoId, soma das quantidades] dos tipos pedidos desde a data. */
+    @Query("select m.insumo.id, sum(m.quantidade) from MovimentacaoEstoque m "
+            + "where m.tipo in :tipos and m.criadoEm >= :desde group by m.insumo.id")
+    List<Object[]> somaPorInsumo(Collection<TipoMovimentacao> tipos, Instant desde);
+
+    /**
+     * Por insumo e tipo: [insumoId, tipo, soma negativa, soma positiva, valor negativo, valor positivo].
+     * Entradas e estornos de importação desfeita ficam de fora: não são consumo nem perda.
+     */
+    @Query("select m.insumo.id, m.tipo, "
+            + "sum(case when m.quantidade < 0 then m.quantidade else 0 end), "
+            + "sum(case when m.quantidade > 0 then m.quantidade else 0 end), "
+            + "sum(case when m.quantidade < 0 then m.quantidade * m.custoUnitario else 0 end), "
+            + "sum(case when m.quantidade > 0 then m.quantidade * m.custoUnitario else 0 end) "
+            + "from MovimentacaoEstoque m where m.criadoEm >= :desde and m.criadoEm < :ate "
+            + "and m.tipo <> com.pointdofrango.estoque.TipoMovimentacao.ENTRADA "
+            + "and (m.observacao is null or m.observacao not like 'Importação desfeita%') "
+            + "group by m.insumo.id, m.tipo")
+    List<Object[]> furoPorInsumo(Instant desde, Instant ate);
+
     /** Última entrada de cada insumo, se for recente: o que acabou de chegar. */
     @EntityGraph(attributePaths = "insumo")
     @Query("select m from MovimentacaoEstoque m where m.criadoEm >= :desde and m.id in "

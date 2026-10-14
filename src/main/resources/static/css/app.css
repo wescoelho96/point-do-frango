@@ -394,3 +394,20 @@ tr.linha-dia td { background: var(--surface-2); border-top: 2px solid var(--bord
 /* Barra de menu do celular: a regra .brand acima (display: flex) anularia o display: none da media query. */
 @media (max-width: 860px) { .brand { display: none; } }
 td .sub.good { color: var(--good-text); }
+
+/* Painel do estoque: barras horizontais com o valor na ponta e barra empilhada de status */
+.painel-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; margin-top: 16px; }
+.grafico h2 { margin: 0; }
+.grafico-sub { margin: 2px 0 10px; font-size: .82rem; }
+.hbarras { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.hbarra { display: grid; grid-template-columns: minmax(90px, 38%) 1fr auto; gap: 8px; align-items: center; font-size: .85rem; cursor: default; }
+.hbarra-rotulo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
+.hbarra-trilho { height: 14px; border-left: 1px solid var(--baseline); display: flex; align-items: center; }
+.hbarra-barra { display: block; height: 12px; background: var(--pote-reposicao); border-radius: 0 4px 4px 0; min-width: 2px; }
+.hbarra:hover .hbarra-barra { filter: brightness(1.15); }
+.hbarra-valor { color: var(--text); white-space: nowrap; font-weight: 600; }
+.empilhada { display: flex; gap: 2px; height: 22px; margin-top: 10px; }
+.empilhada > span { border-radius: 4px; min-width: 4px; }
+.legenda { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: .85rem; color: var(--text-2); }
+.status-chip { display: inline-flex; align-items: center; gap: 4px; font-size: .78rem; font-weight: 600; white-space: nowrap; }
+@media (max-width: 720px) { .painel-grade { grid-template-columns: 1fr; } .hbarra { grid-template-columns: minmax(80px, 42%) 1fr auto; } }

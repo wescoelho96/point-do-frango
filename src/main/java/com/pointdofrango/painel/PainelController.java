@@ -1,5 +1,6 @@
 package com.pointdofrango.painel;
 
+import com.pointdofrango.painel.PainelDtos.MargemProduto;
 import com.pointdofrango.painel.PainelDtos.Resumo;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/painel")
@@ -26,6 +28,15 @@ public class PainelController {
         this.service = service;
         this.clock = clock;
         this.zona = zona;
+    }
+
+    @GetMapping("/margens")
+    @Operation(summary = "Lucro e margem de cada produto vendido no período (padrão: últimos 30 dias)")
+    public List<MargemProduto> margens(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inicio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fim) {
+        LocalDate ate = fim != null ? fim : LocalDate.now(clock.withZone(zona));
+        return service.margens(inicio != null ? inicio : ate.minusDays(29), ate);
     }
 
     @GetMapping("/resumo")

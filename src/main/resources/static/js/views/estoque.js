@@ -1,6 +1,8 @@
 import { api, sessao } from '../api.js';
 import { abrirImportacao } from './nota-fiscal.js';
-import { aoClicar, campoParcelas, dataHora, decimal, html, ligarParcelas, modal, moeda, numero, parcelasDe, pct, renderizar, rotulo, toast, toastErro } from '../ui.js';
+import { aoClicar, campoParcelas, dataHora, decimal, hojeISO, html, ligarParcelas, modal, moeda, numero, parcelasDe, pct, renderizar, rotulo, toast, toastErro } from '../ui.js';
+import { abasEstoque, compras, inventario, LOCAIS, painel, seloStatus, sugestaoDeCompra, textoDaLista } from './estoque-abas.js';
+import { ativarTooltips } from './potes.js';
 
 const UNIDADES = ['QUILOGRAMA', 'LITRO', 'UNIDADE', 'GRAMA', 'MILILITRO'];
 
@@ -62,13 +64,22 @@ const SEM_GRUPO = 'Sem grupo';
 const SUGESTOES_GRUPO = ['Carnes', 'Congelados', 'Refrigerantes', 'Cervejas', 'Águas', 'Sucos', 'Óleos e molhos',
   'Embalagens', 'Limpeza', 'Descartáveis'];
 
-export async function montar(container) {
+export async function montar(container, params = {}) {
   const admin = sessao.admin();
+  // Atendente vê só a lista de itens; o dono abre na visão geral.
+  const aba = admin ? (['painel', 'itens', 'compras', 'inventario'].includes(params.aba) ? params.aba : 'painel') : 'itens';
+  let indicadores = new Map();
+  let lotes = [];
+  let margens = [];
+  let furo = [];
+  let diasCompra = 7;
+  let diasFuro = 30;
+  let localContagem = '';
   let insumos = [];
   let produtos = [];
   let fornecedores = [];
   let reposicao = new Map();
-  const filtro = { texto: '', grupo: '', repor: false, chegou: false };
+  const filtro = { texto: '', grupo: '', local: '', repor: false, chegou: false };
   let chegadas = new Map();
 
   async function carregar() {
@@ -80,7 +91,25 @@ export async function montar(container) {
     ]);
     reposicao = new Map(paraRepor.map((r) => [r.insumoId, r]));
     chegadas = new Map(ultimas.map((e) => [e.insumoId, e]));
+    if (admin) {
+      const [ind, extras] = await Promise.all([api.get('/insumos/indicadores?dias=30'), carregarDaAba()]);
+      indicadores = new Map(ind.map((x) => [x.insumoId, x]));
+      [lotes, margens, furo] = extras;
+    }
     desenhar();
+  }
+
+  /** O que só a visão geral e o inventário usam: carregado só quando a aba está aberta. */
+  async function carregarDaAba() {
+    const desde = (n) => { const d = new Date(`${hojeISO()}T12:00:00`); d.setDate(d.getDate() - (n - 1)); return d.toISOString().slice(0, 10); };
+    if (aba === 'painel') {
+      return Promise.all([api.get('/insumos/validades'), api.get('/painel/margens'),
+        api.get(`/insumos/furo?inicio=${desde(30)}&fim=${hojeISO()}`)]);
+    }
+    if (aba === 'inventario') {
+      return Promise.all([api.get('/insumos/validades'), [], api.get(`/insumos/furo?inicio=${desde(diasFuro)}&fim=${hojeISO()}`)]);
+    }
+    return [[], [], []];
   }
 
   const grupos = () => [...new Set(insumos.map((i) => i.grupo || SEM_GRUPO))]
@@ -94,7 +123,12 @@ export async function montar(container) {
     const alertas = insumos.filter((i) => i.ativo && i.abaixoDoMinimo);
     const valorTotal = insumos.reduce((soma, i) => soma + Number(i.valorEmEstoque ?? 0), 0);
     const totalRepor = [...reposicao.values()].reduce((soma, r) => soma + Number(r.valor), 0);
+    if (aba !== 'itens') {
+      desenharAba(valorTotal, totalRepor);
+      return;
+    }
     renderizar(container, html`
+      ${admin ? abasEstoque(aba) : ''}
       <div class="page-head">
         <div>
           <h1>Estoque de insumos</h1>
@@ -106,8 +140,6 @@ export async function montar(container) {
           <button class="btn" data-acao="consumo">🍽️ Consumo da equipe</button>
           ${admin ? html`<button class="btn" data-acao="cortesias">🎁 Cortesias</button>
             <button class="btn" data-acao="nota">📷 Importar nota ou cupom</button>
-            <button class="btn" data-acao="compra">🛒 Compra sem nota (cupom)</button>
-            <button class="btn" data-acao="importadas">🧾 Compras importadas</button>
             <button class="btn btn-primary" data-acao="novo">+ Novo insumo</button>` : ''}
         </div>
       </div>
@@ -118,6 +150,10 @@ export async function montar(container) {
           ${grupos().map((g) => html`<option value="${g}" ${filtro.grupo === g ? 'selected' : ''}>${g}</option>`)}
         </select>
         <label class="row" style="gap:6px;font-size:.9rem"><input type="checkbox" data-filtro="repor" ${filtro.repor ? 'checked' : ''} style="width:auto"> Só o que precisa repor</label>
+        <select data-filtro="local" style="width:auto" aria-label="Local">
+          <option value="">Todos os locais</option>
+          ${[...new Set(insumos.map((i) => i.local).filter(Boolean))].sort().map((l) => html`<option ${filtro.local === l ? 'selected' : ''}>${l}</option>`)}
+        </select>
         <label class="row" style="gap:6px;font-size:.9rem"><input type="checkbox" data-filtro="chegou" ${filtro.chegou ? 'checked' : ''} style="width:auto"> Só o que chegou (3 dias)</label>
         <button class="btn btn-sm" data-acao="historico-consumo">Consumo da equipe (30 dias)</button>
       </div>
@@ -125,23 +161,38 @@ export async function montar(container) {
     desenharTabela();
   }
 
+  function desenharAba(valorTotal, totalRepor) {
+    const titulo = { painel: 'Visão geral do estoque', compras: 'Compras', inventario: 'Inventário' }[aba];
+    const conteudo = aba === 'painel' ? painel({ insumos, indicadores, lotes, margens, furo, totalRepor })
+      : aba === 'compras' ? compras({ sugestao: sugestaoDeCompra(insumos, indicadores, diasCompra), paraDias: diasCompra })
+        : inventario({ insumos, localContagem, furo, diasFuro, lotes });
+    renderizar(container, html`
+      ${abasEstoque(aba)}
+      <div class="page-head"><div><h1>${titulo}</h1>
+        <p>${insumos.filter((i) => i.ativo).length} itens ativos · ${moeda(valorTotal)} em mercadoria</p></div></div>
+      ${conteudo}`);
+  }
+
   function filtrados() {
     const termo = semAcento(filtro.texto);
     return insumos.filter((i) => (!filtro.grupo || (i.grupo || SEM_GRUPO) === filtro.grupo)
       && (!filtro.repor || (i.ativo && i.abaixoDoMinimo))
       && (!filtro.chegou || chegadas.has(i.id))
+      && (!filtro.local || i.local === filtro.local)
       && (!termo || semAcento(`${i.nome} ${i.marca ?? ''} ${i.grupo ?? ''}`).includes(termo)));
   }
 
   function linhaInsumo(i) {
     return html`
       <tr class="${i.ativo ? '' : 'inativo'}">
-        <td><strong>${i.nome}</strong> ${i.marca ? html`<span class="badge">${i.marca}</span>` : ''} ${!i.ativo ? html`<span class="badge">inativo</span>` : ''}
+        <td><strong>${i.nome}</strong> ${i.marca ? html`<span class="badge">${i.marca}</span>` : ''} ${i.local ? html`<span class="badge">📍 ${i.local}</span>` : ''} ${!i.ativo ? html`<span class="badge">inativo</span>` : ''}
           ${i.embalagens.length || i.unidadeUsoNome ? html`<div class="muted" style="font-size:.78rem">
             ${i.embalagens.map((e) => e.nome).join(' · ')}${i.embalagens.length && i.unidadeUsoNome ? ' · ' : ''}${i.unidadeUsoNome
               ? `${numero(i.unidadeUsoPorUnidade, 2)} ${plural(i.unidadeUsoNome, 2)}/${i.sigla}` : ''}</div>` : ''}</td>
         <td class="num right">${numero(i.estoqueAtual)} ${i.sigla}
           ${i.ativo && i.abaixoDoMinimo ? html` <span class="badge badge-bad">⚠ repor</span>` : ''}
+          ${i.ativo && indicadores.has(i.id) ? html`<div>${seloStatus(indicadores.get(i.id).status)}${indicadores.get(i.id).coberturaDias != null
+            ? html` <span class="sub">dá para ${numero(indicadores.get(i.id).coberturaDias, 1)} dia(s)</span>` : ''}</div>` : ''}
           <div class="sub">mín. ${numero(i.estoqueMinimo)} ${i.sigla}${equivalencias(i) ? ` · ${equivalencias(i)}` : ''}</div>
           ${chegadas.has(i.id) ? linhaChegada(chegadas.get(i.id), i.sigla) : ''}</td>
         ${admin ? colunasDeCusto(i) : ''}
@@ -232,12 +283,16 @@ export async function montar(container) {
         <label class="field" style="grid-column:1/-1">Nome<input name="nome" required maxlength="100" value="${i?.nome ?? ''}" placeholder="Ex.: Coca-Cola Zero 2 L"></label>
         <label class="field">Grupo<input name="grupo" maxlength="40" list="lista-grupos" value="${i?.grupo ?? ''}" placeholder="Ex.: Refrigerantes"></label>
         <label class="field">Marca<input name="marca" maxlength="50" list="lista-marcas" value="${i?.marca ?? ''}" placeholder="Ex.: Coca-Cola"></label>
+        <label class="field">Local<input name="local" maxlength="40" list="lista-locais" value="${i?.local ?? ''}" placeholder="Ex.: Freezer"></label>
+        <datalist id="lista-locais">${[...new Set([...LOCAIS, ...insumos.map((x) => x.local).filter(Boolean)])].map((l) => html`<option value="${l}">`)}</datalist>
         <datalist id="lista-grupos">${[...new Set([...grupos().filter((g) => g !== SEM_GRUPO), ...SUGESTOES_GRUPO])].map((g) => html`<option value="${g}">`)}</datalist>
         <datalist id="lista-marcas">${marcas().map((m) => html`<option value="${m}">`)}</datalist>
         <label class="field">Controlar estoque em
           <select name="unidade">${UNIDADES.map((u) => html`<option value="${u}" ${i?.unidade === u ? 'selected' : ''}>${rotulo(u)}</option>`)}</select>
         </label>
-        <label class="field"><span>Estoque mínimo (<span data-sigla>${sigla}</span>)</span><input name="estoqueMinimo" required inputmode="decimal" value="${i ? numero(i.estoqueMinimo) : '0'}"></label>
+        <label class="field"><span>Estoque mínimo (<span data-sigla>${sigla}</span>)</span><input name="estoqueMinimo" required inputmode="decimal" value="${i ? numero(i.estoqueMinimo) : '0'}">
+          ${i && Number(indicadores.get(i.id)?.minimoSugerido) > 0 ? html`<button type="button" class="btn btn-sm" data-minimo-sugerido="${numero(indicadores.get(i.id).minimoSugerido)}"
+            title="3 dias do consumo médio dos últimos 30 dias">Sugerido: ${numero(indicadores.get(i.id).minimoSugerido)} ${sigla}</button>` : ''}</label>
         <label class="field"><span>Custo por <span data-sigla>${sigla}</span> (R$)</span><input name="custoUnitario" required inputmode="decimal" value="${i ? numero(i.custoUnitario, 6) : ''}"></label>
         <div class="field" style="grid-column:1/-1"><span>Calcular o custo pelo valor pago (opcional)</span>
           <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
@@ -290,6 +345,9 @@ export async function montar(container) {
   }
 
   function prepararFormInsumo(form) {
+    form.querySelector('[data-minimo-sugerido]')?.addEventListener('click', (ev) => {
+      form.estoqueMinimo.value = ev.currentTarget.dataset.minimoSugerido;
+    });
     const lucro = form.querySelector('[data-lucro-unidade]');
     const atualizarLucro = () => {
       if (!lucro) return;
@@ -331,7 +389,7 @@ export async function montar(container) {
     custoUnitario: decimal(d.custoUnitario), estoqueInicial: decimal(d.estoqueInicial),
     unidadeUsoNome: d.unidadeUsoNome?.trim() || null,
     unidadeUsoPorUnidade: d.unidadeUsoNome?.trim() ? decimal(d.unidadeUsoPorUnidade) : null,
-    grupo: d.grupo?.trim() || null, marca: d.marca?.trim() || null,
+    grupo: d.grupo?.trim() || null, marca: d.marca?.trim() || null, local: d.local?.trim() || null,
     embalagens: [...form.querySelectorAll('[data-embalagem]')]
       .map((l) => ({
         id: l.querySelector('[name=embId]').value ? Number(l.querySelector('[name=embId]').value) : null,
@@ -508,7 +566,32 @@ export async function montar(container) {
   }
 
   const aoFiltrar = (ev) => {
-    const campo = ev.target.dataset.filtro;
+    const alvo = ev.target;
+    if (alvo.matches('[data-contado]')) {
+      const i = insumo(alvo.dataset.contado);
+      const contado = decimal(alvo.value);
+      const celula = container.querySelector(`[data-diferenca="${i.id}"]`);
+      const dif = contado == null ? null : contado - Number(i.estoqueAtual);
+      celula.textContent = dif == null ? '—' : `${dif > 0 ? '+' : ''}${numero(dif)} ${i.sigla}`;
+      celula.className = `num right ${dif == null || Math.abs(dif) < 0.0005 ? 'muted' : dif < 0 ? 'bad' : 'good'}`;
+      return;
+    }
+    if (ev.type === 'change' && alvo.matches('[data-dias-compra]')) {
+      diasCompra = Math.min(60, Math.max(1, Number(alvo.value) || 7));
+      desenhar();
+      return;
+    }
+    if (ev.type === 'change' && alvo.matches('[data-local-contagem]')) {
+      localContagem = alvo.value;
+      desenhar();
+      return;
+    }
+    if (ev.type === 'change' && alvo.matches('[data-dias-furo]')) {
+      diasFuro = Number(alvo.value);
+      carregar().catch(toastErro);
+      return;
+    }
+    const campo = alvo.dataset.filtro;
     if (!campo) return;
     filtro[campo] = ev.target.type === 'checkbox' ? ev.target.checked : ev.target.value;
     desenharTabela();
@@ -518,7 +601,7 @@ export async function montar(container) {
 
   function linhaCompra() {
     return html`
-      <div class="ficha-linha" data-item-compra style="grid-template-columns:2fr 1.4fr 90px 110px 32px">
+      <div class="ficha-linha" data-item-compra style="grid-template-columns:2fr 1.3fr 80px 100px 130px 32px">
         <select name="cInsumo" aria-label="Insumo">
           <option value="">Escolha o insumo…</option>
           ${grupos().map((g) => html`<optgroup label="${g}">${insumos.filter((i) => i.ativo && (i.grupo || SEM_GRUPO) === g)
@@ -527,6 +610,7 @@ export async function montar(container) {
         <select name="cForma" aria-label="Como chegou"><option value="">Avulso</option></select>
         <input name="cQtd" inputmode="decimal" placeholder="Qtd" aria-label="Quantidade">
         <input name="cValor" inputmode="decimal" placeholder="R$ total" aria-label="Valor pago neste item">
+        <input name="cValidade" type="date" aria-label="Validade (opcional)" title="Validade (opcional)">
         <button type="button" class="btn btn-icon" data-remover-item aria-label="Remover item">✕</button>
       </div>`;
   }
@@ -541,8 +625,8 @@ export async function montar(container) {
         <p class="text-2" style="margin:0">Cupom com QR Code? Use <strong>Importar nota ou cupom</strong> e fotografe o QR Code.
           Sem QR Code, lance cada item com a quantidade e o valor pago nele.
           O custo médio de cada insumo é recalculado e o total entra uma vez só nas saídas.</p>
-        <div class="muted" style="font-size:.8rem;display:grid;grid-template-columns:2fr 1.4fr 90px 110px 32px;gap:8px">
-          <span>Insumo</span><span>Como chegou</span><span>Quantidade</span><span>Valor (R$)</span><span></span></div>
+        <div class="muted" style="font-size:.8rem;display:grid;grid-template-columns:2fr 1.3fr 80px 100px 130px 32px;gap:8px">
+          <span>Insumo</span><span>Como chegou</span><span>Quantidade</span><span>Valor (R$)</span><span>Validade</span><span></span></div>
         <div class="stack" data-itens-compra>${[1, 2, 3].map(() => linhaCompra())}</div>
         <div class="row" style="justify-content:space-between">
           <button type="button" class="btn btn-sm" data-add-item>+ Item</button>
@@ -596,9 +680,10 @@ export async function montar(container) {
             const valorTotal = decimal(l.querySelector('[name=cValor]').value);
             if (!quantidade || valorTotal == null) throw new Error(`Informe a quantidade e o valor de ${nome}.`);
             const embalagemId = l.querySelector('[name=cForma]').value ? Number(l.querySelector('[name=cForma]').value) : null;
+            const validade = l.querySelector('[name=cValidade]').value || null;
             return embalagemId
-              ? { insumoId: Number(l.querySelector('[name=cInsumo]').value), embalagemId, quantidadeEmbalagens: quantidade, valorTotal }
-              : { insumoId: Number(l.querySelector('[name=cInsumo]').value), quantidade, valorTotal };
+              ? { insumoId: Number(l.querySelector('[name=cInsumo]').value), embalagemId, quantidadeEmbalagens: quantidade, valorTotal, validade }
+              : { insumoId: Number(l.querySelector('[name=cInsumo]').value), quantidade, valorTotal, validade };
           });
         if (!itens.length) throw new Error('Escolha pelo menos um insumo.');
         const r = await api.post('/insumos/compras', {
@@ -688,6 +773,43 @@ export async function montar(container) {
     nota: () => abrirImportacao(insumos, carregar),
     compra: () => abrirCompra(),
     importadas: () => abrirImportadas().catch(toastErro),
+    'copiar-lista': async () => {
+      const lista = sugestaoDeCompra(insumos, indicadores, diasCompra);
+      const porGrupo = Object.entries(lista.reduce((acc, x) => { (acc[x.i.grupo || 'Sem grupo'] ??= []).push(x); return acc; }, {}));
+      try {
+        await navigator.clipboard.writeText(textoDaLista(porGrupo, diasCompra, lista.reduce((t, x) => t + x.custo, 0)));
+        toast('Lista copiada');
+      } catch { toastErro(new Error('Não foi possível copiar. Use o botão do WhatsApp.')); }
+    },
+    'salvar-contagem': async () => {
+      const itens = [...container.querySelectorAll('[data-contado]')].filter((el) => el.value.trim() !== '')
+        .map((el) => ({ insumoId: Number(el.dataset.contado), quantidadeContada: decimal(el.value) }));
+      if (!itens.length) { toastErro(new Error('Preencha o contado de pelo menos um item.')); return; }
+      try {
+        const motivo = container.querySelector('[data-motivo-contagem]').value.trim() || 'Contagem';
+        const r = await api.post('/insumos/contagem', { motivo, itens });
+        toast(`Contagem salva: ${itens.length} item(ns) conferido(s), ${r.ajustados} com diferença`);
+        await carregar();
+      } catch (e) { toastErro(e); }
+    },
+    'nova-validade': () => modal({
+      titulo: 'Registrar validade',
+      corpo: html`<div class="form-grid">
+        <label class="field" style="grid-column:1/-1">Item<select name="insumoId" required>
+          <option value="">Escolha…</option>
+          ${insumos.filter((i) => i.ativo).map((i) => html`<option value="${i.id}">${i.nome} (${numero(i.estoqueAtual)} ${i.sigla})</option>`)}</select></label>
+        <label class="field">Quantidade<input name="quantidade" required inputmode="decimal"></label>
+        <label class="field">Validade<input name="validade" type="date" required></label></div>`,
+      aoSalvar: async (d) => {
+        if (!d.insumoId) throw new Error('Escolha o item.');
+        await api.post(`/insumos/${d.insumoId}/validades`, { quantidade: decimal(d.quantidade), validade: d.validade });
+        toast('Validade registrada');
+        await carregar();
+      },
+    }),
+    'remover-validade': async (el) => {
+      try { await api.del(`/insumos/validades/${el.dataset.id}`); await carregar(); } catch (e) { toastErro(e); }
+    },
     cortesias: () => abrirCortesias().catch(toastErro),
     'historico-consumo': () => abrirHistoricoConsumo().catch(toastErro),
     editar: (el) => {
@@ -745,6 +867,7 @@ export async function montar(container) {
             <label class="field"><span data-rotulo-qtd>${temEmbalagem ? 'Quantas embalagens' : `Quantidade (${i.sigla})`}</span>
               <input name="quantidade" required inputmode="decimal"></label>
             <label class="field">Valor total pago (R$)<input name="valorTotal" required inputmode="decimal"></label>
+            <label class="field">Validade (opcional)<input name="validade" type="date"></label>
           </div>
           <div class="card" style="background:var(--surface-2);font-size:.9rem" data-resumo>Informe a quantidade.</div>
           ${admin ? html`<div class="muted" style="font-size:.85rem" data-lucro-compra></div>` : ''}
@@ -795,6 +918,7 @@ export async function montar(container) {
             embalagemId: porEmbalagem ? Number(d.forma) : null,
             quantidadeEmbalagens: porEmbalagem ? decimal(d.quantidade) : null,
             valorTotal: decimal(d.valorTotal),
+            validade: d.validade || null,
             observacao: d.observacao,
             pagamento: d.pagamento === 'NAO' ? null : {
               forma: d.pagamento === 'CAIXA' ? 'DINHEIRO' : d.pagamento,
@@ -851,9 +975,11 @@ export async function montar(container) {
     },
   });
 
+  const soltarTooltips = ativarTooltips(container);
   await carregar();
   return () => {
     soltar();
+    soltarTooltips();
     container.removeEventListener('input', aoFiltrar);
     container.removeEventListener('change', aoFiltrar);
   };

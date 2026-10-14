@@ -13,6 +13,7 @@ import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 public final class EstoqueDtos {
@@ -32,19 +33,27 @@ public final class EstoqueDtos {
             @DecimalMin(value = "0", inclusive = false) BigDecimal unidadeUsoPorUnidade,
             List<@Valid EmbalagemRequest> embalagens,
             @Size(max = 40) String grupo,
-            @Size(max = 50) String marca) {
+            @Size(max = 50) String marca,
+            @Size(max = 40) String local) {
 
         /** Cadastro simples: sem unidade de uso e sem embalagens. */
         public InsumoRequest(String nome, UnidadeMedida unidade, BigDecimal estoqueMinimo, BigDecimal custoUnitario,
                              BigDecimal estoqueInicial) {
-            this(nome, unidade, estoqueMinimo, custoUnitario, estoqueInicial, null, null, null, null, null);
+            this(nome, unidade, estoqueMinimo, custoUnitario, estoqueInicial, null, null, null, null, null, null);
         }
 
         public InsumoRequest(String nome, UnidadeMedida unidade, BigDecimal estoqueMinimo, BigDecimal custoUnitario,
                              BigDecimal estoqueInicial, String unidadeUsoNome, BigDecimal unidadeUsoPorUnidade,
                              List<EmbalagemRequest> embalagens) {
             this(nome, unidade, estoqueMinimo, custoUnitario, estoqueInicial, unidadeUsoNome, unidadeUsoPorUnidade,
-                    embalagens, null, null);
+                    embalagens, null, null, null);
+        }
+
+        public InsumoRequest(String nome, UnidadeMedida unidade, BigDecimal estoqueMinimo, BigDecimal custoUnitario,
+                             BigDecimal estoqueInicial, String unidadeUsoNome, BigDecimal unidadeUsoPorUnidade,
+                             List<EmbalagemRequest> embalagens, String grupo, String marca) {
+            this(nome, unidade, estoqueMinimo, custoUnitario, estoqueInicial, unidadeUsoNome, unidadeUsoPorUnidade,
+                    embalagens, grupo, marca, null);
         }
 
         public List<EmbalagemRequest> embalagensOuVazio() {
@@ -66,11 +75,18 @@ public final class EstoqueDtos {
             @DecimalMin(value = "0", inclusive = false) BigDecimal quantidadeEmbalagens,
             @NotNull @DecimalMin("0") BigDecimal valorTotal,
             @Size(max = 255) String observacao,
-            @Valid PagamentoCompra pagamento) {
+            @Valid PagamentoCompra pagamento,
+            /* opcional: vira um lote com validade */
+            LocalDate validade) {
 
         public EntradaRequest(BigDecimal quantidade, Long embalagemId, BigDecimal quantidadeEmbalagens,
                               BigDecimal valorTotal, String observacao) {
-            this(quantidade, embalagemId, quantidadeEmbalagens, valorTotal, observacao, null);
+            this(quantidade, embalagemId, quantidadeEmbalagens, valorTotal, observacao, null, null);
+        }
+
+        public EntradaRequest(BigDecimal quantidade, Long embalagemId, BigDecimal quantidadeEmbalagens,
+                              BigDecimal valorTotal, String observacao, PagamentoCompra pagamento) {
+            this(quantidade, embalagemId, quantidadeEmbalagens, valorTotal, observacao, pagamento, null);
         }
     }
 
@@ -98,7 +114,13 @@ public final class EstoqueDtos {
             @DecimalMin(value = "0", inclusive = false) BigDecimal quantidade,
             Long embalagemId,
             @DecimalMin(value = "0", inclusive = false) BigDecimal quantidadeEmbalagens,
-            @NotNull @DecimalMin("0") BigDecimal valorTotal) {
+            @NotNull @DecimalMin("0") BigDecimal valorTotal,
+            LocalDate validade) {
+
+        public ItemCompra(Long insumoId, BigDecimal quantidade, Long embalagemId, BigDecimal quantidadeEmbalagens,
+                          BigDecimal valorTotal) {
+            this(insumoId, quantidade, embalagemId, quantidadeEmbalagens, valorTotal, null);
+        }
     }
 
     public record CompraResponse(int itens, BigDecimal valorTotal) {
@@ -116,6 +138,41 @@ public final class EstoqueDtos {
         }
     }
 
+    public enum StatusEstoque { NORMAL, ALERTA, CRITICO }
+
+    /**
+     * Situação de cada insumo pelo consumo dos últimos dias: quanto sai por dia, para quantos dias o saldo dá
+     * e um mínimo sugerido (3 dias de consumo).
+     */
+    public record IndicadorInsumo(Long insumoId, BigDecimal consumoNoPeriodo, BigDecimal consumoDiario,
+                                  BigDecimal coberturaDias, StatusEstoque status, BigDecimal minimoSugerido) {
+    }
+
+    /**
+     * Furo de inventário no período: o que saiu pelas vendas e pela equipe (esperado) contra o que a contagem
+     * achou a mais ou a menos (perdas = quebra, vencimento, desvio).
+     */
+    public record FuroInsumo(Long insumoId, String insumo, String sigla, String grupo, BigDecimal vendido,
+                             BigDecimal consumoInterno, BigDecimal perdas, BigDecimal sobras,
+                             BigDecimal valorPerdas, BigDecimal valorSobras, BigDecimal percentualPerda) {
+    }
+
+    public record ContagemRequest(@NotBlank @Size(max = 150) String motivo,
+                                  @NotEmpty @Size(max = 300) List<@Valid ItemContado> itens) {
+    }
+
+    public record ItemContado(@NotNull Long insumoId, @NotNull @DecimalMin("0") BigDecimal quantidadeContada) {
+    }
+
+    public record ValidadeRequest(@NotNull @DecimalMin(value = "0", inclusive = false) BigDecimal quantidade,
+                                  @NotNull LocalDate validade) {
+    }
+
+    /** restante: quanto do lote ainda deve estar no estoque (o saldo vai primeiro para os lotes mais novos). */
+    public record LoteResponse(Long id, Long insumoId, String insumo, String sigla, String local, BigDecimal quantidade,
+                               BigDecimal restante, LocalDate validade, long diasParaVencer, BigDecimal valorRestante) {
+    }
+
     /** O que chegou por último em cada insumo (origem = nota, cupom ou observação da entrada). */
     public record UltimaEntrada(Long insumoId, Instant quando, BigDecimal quantidade, String origem) {
     }
@@ -128,20 +185,20 @@ public final class EstoqueDtos {
                                  BigDecimal estoqueAtual, BigDecimal estoqueMinimo, BigDecimal custoUnitario,
                                  BigDecimal valorEmEstoque, boolean abaixoDoMinimo, boolean ativo,
                                  String unidadeUsoNome, BigDecimal unidadeUsoPorUnidade,
-                                 List<EmbalagemResponse> embalagens, String grupo, String marca) {
+                                 List<EmbalagemResponse> embalagens, String grupo, String marca, String local) {
 
         public static InsumoResponse de(Insumo i) {
             return new InsumoResponse(i.getId(), i.getNome(), i.getUnidade(), i.getUnidade().getSigla(),
                     i.getUnidade().getSubunidade(), i.getEstoqueAtual(), i.getEstoqueMinimo(), i.getCustoUnitario(),
                     Dinheiro.centavos(i.getEstoqueAtual().multiply(i.getCustoUnitario())),
                     i.abaixoDoMinimo(), i.isAtivo(), i.getUnidadeUsoNome(), i.getUnidadeUsoPorUnidade(),
-                    i.getEmbalagens().stream().map(EmbalagemResponse::de).toList(), i.getGrupo(), i.getMarca());
+                    i.getEmbalagens().stream().map(EmbalagemResponse::de).toList(), i.getGrupo(), i.getMarca(), i.getLocal());
         }
 
         /** O atendente confere o saldo, mas não vê quanto a loja paga pelos insumos. */
         public InsumoResponse semCustos() {
             return new InsumoResponse(id, nome, unidade, sigla, subunidade, estoqueAtual, estoqueMinimo, null, null,
-                    abaixoDoMinimo, ativo, unidadeUsoNome, unidadeUsoPorUnidade, embalagens, grupo, marca);
+                    abaixoDoMinimo, ativo, unidadeUsoNome, unidadeUsoPorUnidade, embalagens, grupo, marca, local);
         }
     }
 

@@ -269,7 +269,16 @@ O dono vê, durante o dia, o troco inicial, o recebido por forma de pagamento, a
 
 ![Estoque](img/estoque.png)
 
-A tela **Estoque** lista os insumos por grupo, com saldo, mínimo, custo médio e valor em estoque. Use a busca, o filtro de grupo e **Só o que precisa repor** para localizar itens. Insumos abaixo do mínimo exibem a marca "repor".
+A tela **Estoque** tem quatro abas (o atendente vê só **Itens**):
+
+- **Visão geral:** painel com valor em estoque, itens críticos e em alerta, margem média dos últimos 30 dias, validades próximas, valor a separar para repor e perdas no inventário. Os gráficos mostram a situação do estoque, o que acaba primeiro (dias de estoque pelo consumo médio), lucro e margem por produto, as menores margens, o valor parado por grupo e as maiores perdas.
+- **Itens:** a lista de insumos, com o status de cada um (✅ Normal, ⚠️ Alerta, ⛔ Crítico), para quantos dias o saldo dá e o local onde fica guardado.
+- **Compras:** importar nota ou cupom, compra sem nota, compras importadas e a **Sugestão de compra**: para o número de dias escolhido, o sistema calcula o que comprar pelo consumo médio, arredondado para a embalagem do fornecedor, com o custo estimado. A lista pode ser copiada ou enviada pelo WhatsApp.
+- **Inventário:** furo de inventário (o que as vendas deveriam ter consumido contra o que a contagem encontrou), validades e **Contagem por local**, para contar o freezer, a geladeira ou o estoque seco de uma vez.
+
+Status: **Crítico** é item zerado, abaixo do mínimo ou que acaba em menos de 2 dias; **Alerta** é item perto do mínimo ou que acaba em menos de 5 dias. Em **Editar**, o botão **Sugerido** preenche o estoque mínimo com 3 dias de consumo, e o campo **Local** define onde o item fica. A **validade** é informada na entrada da compra (ou em Inventário, **+ Registrar validade**); o que chegou antes é considerado o primeiro a sair.
+
+A aba **Itens** lista os insumos por grupo, com saldo, mínimo, custo médio e valor em estoque. Use a busca, o filtro de grupo e **Só o que precisa repor** para localizar itens. Insumos abaixo do mínimo exibem a marca "repor".
 
 **Registrar uma compra (Entrada):**
 

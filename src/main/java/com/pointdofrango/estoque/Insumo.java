@@ -76,6 +76,10 @@ public class Insumo {
     @Column(length = 50)
     private String marca;
 
+    /** Onde fica guardado: Freezer, Geladeira, Estoque seco, Bar. */
+    @Column(name = "localizacao", length = 40)
+    private String local;
+
     @OneToMany(mappedBy = "insumo", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("conteudo DESC")
     private Set<EmbalagemCompra> embalagens = new LinkedHashSet<>();
@@ -115,6 +119,10 @@ public class Insumo {
     public void classificar(String grupo, String marca) {
         this.grupo = vazioParaNulo(grupo);
         this.marca = vazioParaNulo(marca);
+    }
+
+    public void guardarEm(String local) {
+        this.local = vazioParaNulo(local);
     }
 
     private static String vazioParaNulo(String s) {
@@ -316,6 +324,10 @@ public class Insumo {
 
     public String getMarca() {
         return marca;
+    }
+
+    public String getLocal() {
+        return local;
     }
 
     public String getUnidadeUsoNome() {

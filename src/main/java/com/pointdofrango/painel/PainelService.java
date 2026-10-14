@@ -14,6 +14,7 @@ import com.pointdofrango.saida.RelatorioSaidasService;
 import com.pointdofrango.saida.RelatorioSaidasService.Lancamento;
 import com.pointdofrango.shared.Dinheiro;
 import com.pointdofrango.painel.PainelDtos.MaisVendido;
+import com.pointdofrango.painel.PainelDtos.MargemProduto;
 import com.pointdofrango.painel.PainelDtos.Resumo;
 import com.pointdofrango.pedido.CanalVenda;
 import com.pointdofrango.pedido.ComandaRepository;
@@ -35,6 +36,7 @@ import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.Set;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -189,6 +191,41 @@ public class PainelService {
     private static Agrupamento agrupamento(String chave, String rotulo, List<Pedido> pedidos) {
         DistribuicaoFinanceira soma = somar(pedidos);
         return new Agrupamento(chave, rotulo, pedidos.size(), soma.valorBruto(), soma.taxaPagamento());
+    }
+
+    /** Margem de cada produto vendido no período (cortesias ficam de fora: não são venda). */
+    @Transactional(readOnly = true)
+    public List<MargemProduto> margens(LocalDate inicio, LocalDate fim) {
+        if (fim.isBefore(inicio)) {
+            throw new RegraDeNegocioException("A data final não pode ser antes da inicial.");
+        }
+        record Chave(Long produtoId, boolean brinde) {
+        }
+        Map<Chave, String> nomes = new LinkedHashMap<>();
+        Map<Chave, int[]> quantidades = new HashMap<>();
+        Map<Chave, BigDecimal[]> valores = new HashMap<>();
+        for (Pedido pedido : pedidos.doPeriodo(inicioDe(inicio), inicioDe(fim.plusDays(1)))) {
+            if (pedido.getStatus() == StatusPedido.CANCELADO || pedido.cortesia()) {
+                continue;
+            }
+            for (ItemPedido item : pedido.getItens()) {
+                Chave chave = new Chave(item.getProdutoId(), item.isBrinde());
+                nomes.putIfAbsent(chave, item.getNomeProduto());
+                quantidades.computeIfAbsent(chave, c -> new int[1])[0] += item.getQuantidade();
+                BigDecimal[] v = valores.computeIfAbsent(chave, c -> new BigDecimal[] {BigDecimal.ZERO, BigDecimal.ZERO});
+                v[0] = v[0].add(item.subtotal());
+                v[1] = v[1].add(item.custoTotal());
+            }
+        }
+        return nomes.entrySet().stream().map(e -> {
+            BigDecimal[] v = valores.get(e.getKey());
+            BigDecimal lucro = v[0].subtract(v[1]);
+            BigDecimal margem = v[0].signum() > 0
+                    ? lucro.multiply(BigDecimal.valueOf(100)).divide(v[0], 1, RoundingMode.HALF_UP) : null;
+            return new MargemProduto(e.getKey().produtoId(), e.getValue(), e.getKey().brinde(),
+                    quantidades.get(e.getKey())[0], Dinheiro.centavos(v[0]), Dinheiro.centavos(v[1]),
+                    Dinheiro.centavos(lucro), margem);
+        }).sorted(Comparator.comparing(MargemProduto::lucro).reversed()).toList();
     }
 
     private static List<MaisVendido> maisVendidos(List<Pedido> pedidos) {

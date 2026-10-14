@@ -41,6 +41,14 @@ public final class PainelDtos {
     public record MaisVendido(Long produtoId, String produto, int quantidade, BigDecimal valor) {
     }
 
+    /**
+     * Lucro real de cada produto no período, pelo preço e pelo custo gravados em cada venda.
+     * brinde: saiu de graça numa promoção (só custo).
+     */
+    public record MargemProduto(Long produtoId, String produto, boolean brinde, int quantidade, BigDecimal faturamento,
+                                BigDecimal custo, BigDecimal lucro, BigDecimal margemPercentual) {
+    }
+
     public record Dia(LocalDate data, int pedidos, BigDecimal faturamento, BigDecimal lucroLiquido) {
     }
 

@@ -3,6 +3,11 @@ package com.pointdofrango.estoque;
 import com.pointdofrango.estoque.EstoqueDtos.AjusteRequest;
 import com.pointdofrango.estoque.EstoqueDtos.CompraRequest;
 import com.pointdofrango.estoque.EstoqueDtos.CompraResponse;
+import com.pointdofrango.estoque.EstoqueDtos.ContagemRequest;
+import com.pointdofrango.estoque.EstoqueDtos.FuroInsumo;
+import com.pointdofrango.estoque.EstoqueDtos.IndicadorInsumo;
+import com.pointdofrango.estoque.EstoqueDtos.LoteResponse;
+import com.pointdofrango.estoque.EstoqueDtos.ValidadeRequest;
 import com.pointdofrango.estoque.EstoqueDtos.EntradaRequest;
 import com.pointdofrango.estoque.EstoqueDtos.InsumoRequest;
 import com.pointdofrango.estoque.EstoqueDtos.InsumoResponse;
@@ -26,7 +31,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/insumos")
@@ -34,15 +41,53 @@ import java.util.List;
 public class InsumoController {
 
     private final EstoqueService service;
+    private final ControleEstoqueService controle;
 
-    public InsumoController(EstoqueService service) {
+    public InsumoController(EstoqueService service, ControleEstoqueService controle) {
         this.service = service;
+        this.controle = controle;
     }
 
     @GetMapping
     public List<InsumoResponse> listar(Authentication auth) {
         boolean admin = admin(auth);
         return service.listar().stream().map(InsumoResponse::de).map(i -> admin ? i : i.semCustos()).toList();
+    }
+
+    @GetMapping("/indicadores")
+    @Operation(summary = "Situação de cada insumo (normal, alerta, crítico), consumo por dia, cobertura e mínimo sugerido")
+    public List<IndicadorInsumo> indicadores(@RequestParam(defaultValue = "30") int dias) {
+        return controle.indicadores(dias);
+    }
+
+    @GetMapping("/furo")
+    @Operation(summary = "Furo de inventário: saída esperada pelas vendas contra perdas e sobras das contagens")
+    public List<FuroInsumo> furo(@RequestParam LocalDate inicio, @RequestParam LocalDate fim) {
+        return controle.furo(inicio, fim);
+    }
+
+    @GetMapping("/validades")
+    @Operation(summary = "Lotes com validade que ainda estão no estoque, do que vence primeiro")
+    public List<LoteResponse> validades() {
+        return controle.lotes();
+    }
+
+    @PostMapping("/{id}/validades")
+    @ResponseStatus(HttpStatus.CREATED)
+    public void registrarValidade(@PathVariable Long id, @Valid @RequestBody ValidadeRequest req, Authentication auth) {
+        controle.registrarLote(id, req, auth.getName());
+    }
+
+    @DeleteMapping("/validades/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void removerValidade(@PathVariable Long id) {
+        controle.removerLote(id);
+    }
+
+    @PostMapping("/contagem")
+    @Operation(summary = "Contagem de vários itens de uma vez (por local)")
+    public Map<String, Integer> contagem(@Valid @RequestBody ContagemRequest req, Authentication auth) {
+        return Map.of("ajustados", service.registrarContagem(req, auth.getName()));
     }
 
     @GetMapping("/ultimas-entradas")
