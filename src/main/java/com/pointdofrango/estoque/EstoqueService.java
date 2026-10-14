@@ -130,9 +130,26 @@ public class EstoqueService {
                 .toList();
     }
 
+    /** Prefixo do ajuste que registra o estorno de uma compra importada. */
+    public static final String ESTORNO_DE_IMPORTACAO = "Importação desfeita: ";
+
+    /**
+     * Entradas da compra que ainda valem. Cada estorno anterior (mesmo insumo, mesma quantidade, depois da entrada)
+     * anula uma delas: desfazer a mesma compra duas vezes não estorna em dobro.
+     */
     @Transactional(readOnly = true)
     public List<MovimentacaoEstoque> entradasDaCompra(Collection<String> observacoes, Instant desde, Instant ate) {
-        return movimentacoes.findByTipoAndObservacaoInAndCriadoEmBetween(TipoMovimentacao.ENTRADA, observacoes, desde, ate);
+        List<MovimentacaoEstoque> estornos = new ArrayList<>(movimentacoes.findByTipoAndObservacaoInAndCriadoEmGreaterThanEqual(
+                TipoMovimentacao.AJUSTE, observacoes.stream().map(o -> ESTORNO_DE_IMPORTACAO + o).toList(), desde));
+        List<MovimentacaoEstoque> valendo = new ArrayList<>();
+        movimentacoes.findByTipoAndObservacaoInAndCriadoEmBetween(TipoMovimentacao.ENTRADA, observacoes, desde, ate).stream()
+                .sorted(Comparator.comparing(MovimentacaoEstoque::getId))
+                .forEach(entrada -> estornos.stream()
+                        .filter(a -> a.getInsumo().getId().equals(entrada.getInsumo().getId()) && a.getId() > entrada.getId()
+                                && a.getQuantidade().compareTo(entrada.getQuantidade().negate()) == 0)
+                        .findFirst()
+                        .ifPresentOrElse(estornos::remove, () -> valendo.add(entrada)));
+        return valendo;
     }
 
     /**

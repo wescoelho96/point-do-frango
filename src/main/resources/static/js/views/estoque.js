@@ -652,6 +652,9 @@ export async function montar(container) {
             const r = await api.del(`/notas/${id}`);
             toast(`Importação desfeita: ${r.entradas} entrada(s) estornada(s)${r.insumosRemovidos
               ? `, ${r.insumosRemovidos} item(ns) removido(s)` : ''}${r.saidasRemovidas ? ', pagamento removido das saídas' : ''}`);
+            if (r.negativos.length) {
+              toast(`Já tinham vendido parte do que chegou e ficaram negativos até importar de novo: ${r.negativos.join(', ')}`);
+            }
             await carregar();
           },
         });

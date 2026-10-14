@@ -1,5 +1,6 @@
 package com.pointdofrango.notafiscal;
 
+import com.pointdofrango.estoque.EstoqueDtos.AjusteRequest;
 import com.pointdofrango.estoque.EstoqueDtos.InsumoRequest;
 import com.pointdofrango.estoque.EstoqueService;
 import com.pointdofrango.estoque.Insumo;
@@ -64,6 +65,34 @@ class DesfazerImportacaoIntegrationTest {
         assertThatThrownBy(() -> estoque.buscar(sassami.getId())).isInstanceOf(RecursoNaoEncontradoException.class);
         assertThat(totalDeSaidas()).isEqualByComparingTo(saidasAntes);
         assertThat(notas.previa(xml).jaImportada()).isFalse();
+    }
+
+    @Test
+    @DisplayName("Parte do que chegou já foi usada: o desfazer deixa negativo e a nova importação volta ao saldo certo")
+    void desfazerDepoisDeUsar() throws IOException {
+        Insumo coca = estoque.criar(new InsumoRequest("Coca usada", UnidadeMedida.UNIDADE, bd("0"), bd("8"), bd("0")), "t");
+        String sem = "3526101122233300018155001000012400112345678";
+        String xml = LeitorNfeTest.xmlDeExemplo().replace(LeitorNfeTest.CHAVE, sem + LeitorNfe.digitoChave(sem))
+                .replace("<nNF>12345</nNF>", "<nNF>12400</nNF>");
+        List<Ligacao> ligacoes = List.of(new Ligacao(1, coca.getId(), bd("6")));
+
+        notas.importar(xml, null, ligacoes, null, "dono");
+        estoque.registrarAjuste(coca.getId(), new AjusteRequest(bd("8"), "Vendidas 4"), "dono");
+        NotaFiscalCompra importada = repositorio.findTop30ByOrderByImportadaEmDesc().stream()
+                .filter(n -> n.getNumero().equals("12400")).findFirst().orElseThrow();
+
+        var r = notas.desfazer(importada.getId(), "dono");
+
+        assertThat(r.negativos()).containsExactly("Coca usada");
+        assertThat(estoque.buscar(coca.getId()).getEstoqueAtual()).isEqualByComparingTo("-4");
+        notas.importar(xml, null, ligacoes, null, "dono");
+        assertThat(estoque.buscar(coca.getId()).getEstoqueAtual()).isEqualByComparingTo("8");
+
+        // Desfazer de novo estorna só a importação mais recente, não a que já foi desfeita (8 - 12 = -4, não -16).
+        // Também limpa a nota e as ligações do fornecedor, que outros testes usam do zero.
+        repositorio.findTop30ByOrderByImportadaEmDesc().stream().filter(n -> n.getNumero().equals("12400"))
+                .forEach(n -> notas.desfazer(n.getId(), "dono"));
+        assertThat(estoque.buscar(coca.getId()).getEstoqueAtual()).isEqualByComparingTo("-4");
     }
 
     private BigDecimal totalDeSaidas() {

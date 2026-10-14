@@ -233,13 +233,12 @@ public class Insumo {
         estoqueAtual = estoqueAtual.add(quantidade);
     }
 
-    /** Desfaz uma compra: tira a quantidade e o valor dela, voltando o custo médio ao que era sem ela. */
+    /**
+     * Desfaz uma compra: tira a quantidade e o valor dela, voltando o custo médio ao que era sem ela.
+     * Se parte do que chegou já foi vendida, o saldo fica negativo até a compra ser lançada de novo.
+     */
     void estornarEntrada(BigDecimal quantidade, BigDecimal valorDaEntrada) {
         positivo(quantidade);
-        if (!possui(quantidade)) {
-            throw new RegraDeNegocioException(nome + " já usou parte do que chegou nessa compra (saldo "
-                    + estoqueAtual.stripTrailingZeros().toPlainString() + "). Ajuste pela contagem antes de desfazer.");
-        }
         BigDecimal valorRestante = estoqueAtual.multiply(custoUnitario).subtract(valorDaEntrada);
         estoqueAtual = estoqueAtual.subtract(quantidade);
         if (estoqueAtual.abs().compareTo(TOLERANCIA) < 0) {

@@ -25,6 +25,10 @@ public interface MovimentacaoEstoqueRepository extends JpaRepository<Movimentaca
 
     Optional<MovimentacaoEstoque> findFirstByInsumoIdAndIdLessThanOrderByIdDesc(Long insumoId, Long id);
 
+    @EntityGraph(attributePaths = "insumo")
+    List<MovimentacaoEstoque> findByTipoAndObservacaoInAndCriadoEmGreaterThanEqual(TipoMovimentacao tipo,
+                                                                                   Collection<String> observacoes, Instant desde);
+
     @Query("select m.id from MovimentacaoEstoque m where m.insumo.id = :insumoId")
     List<Long> idsDoInsumo(Long insumoId);
 

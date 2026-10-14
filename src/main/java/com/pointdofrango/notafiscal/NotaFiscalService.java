@@ -170,7 +170,8 @@ public class NotaFiscalService {
         itensFornecedor.deleteAll(itensFornecedor.findByInsumoId(evento.insumoId()));
     }
 
-    public record Desfeita(int entradas, int insumosRemovidos, int saidasRemovidas) {
+    /** negativos: itens que já tinham vendido parte do que chegou; voltam ao certo ao importar de novo. */
+    public record Desfeita(int entradas, int insumosRemovidos, int saidasRemovidas, List<String> negativos) {
     }
 
     /** Aparece no extrato e nas saídas; modelo 65 na chave é cupom (NFC-e). */
@@ -191,7 +192,7 @@ public class NotaFiscalService {
                 "NF-e nº " + nota.getNumero() + " · " + nota.getEmitenteNome());
         Instant desde = nota.getImportadaEm().minus(Duration.ofMinutes(30));
         Instant ate = nota.getImportadaEm().plus(Duration.ofMinutes(1));
-        String motivo = "Importação desfeita: " + descricoes.get(0);
+        String motivo = EstoqueService.ESTORNO_DE_IMPORTACAO + descricoes.get(0);
 
         Set<Long> movimentacoesDaCompra = new HashSet<>();
         Set<Long> insumosTocados = new LinkedHashSet<>();
@@ -206,6 +207,8 @@ public class NotaFiscalService {
             itensFornecedor.deleteAll(itensFornecedor.findByFornecedorId(nota.getFornecedorId()).stream()
                     .filter(i -> insumosTocados.contains(i.getInsumoId())).toList());
         }
+        List<String> negativos = insumosTocados.stream().map(estoque::buscar)
+                .filter(i -> i.getEstoqueAtual().signum() < 0).map(i -> i.getNome()).toList();
         int removidos = 0;
         for (Long insumoId : insumosTocados) {
             if (estoque.excluirSeSoDaCompra(insumoId, movimentacoesDaCompra)) {
@@ -215,7 +218,7 @@ public class NotaFiscalService {
         notas.delete(nota);
         log.info("Importação {} desfeita por {}: {} entrada(s), {} insumo(s) removido(s), {} saída(s)", nota.getChave(), usuario,
                 entradas.size(), removidos, saidasRemovidas);
-        return new Desfeita(entradas.size(), removidos, saidasRemovidas);
+        return new Desfeita(entradas.size(), removidos, saidasRemovidas, negativos);
     }
 
     @Transactional(readOnly = true)
