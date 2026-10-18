@@ -12,6 +12,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 /**
  * Nome, preço e custo são copiados no momento da venda, para que mudanças no cardápio
@@ -61,6 +62,13 @@ public class ItemPedido {
         this.quantidade = quantidade;
         this.precoUnitario = produto.getPrecoVenda();
         this.custoUnitario = custoUnitario;
+    }
+
+    /** Lançamento retroativo: o preço cobrado naquele dia, que pode ser diferente do cardápio de hoje. */
+    static ItemPedido comPreco(Pedido pedido, Produto produto, int quantidade, BigDecimal custoUnitario, BigDecimal preco) {
+        ItemPedido item = new ItemPedido(pedido, produto, quantidade, custoUnitario);
+        item.precoUnitario = preco.setScale(2, RoundingMode.HALF_UP);
+        return item;
     }
 
     static ItemPedido brinde(Pedido pedido, Produto produto, int quantidade, BigDecimal custoUnitario, String promocao) {

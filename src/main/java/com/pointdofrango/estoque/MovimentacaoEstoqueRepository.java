@@ -48,7 +48,8 @@ public interface MovimentacaoEstoqueRepository extends JpaRepository<Movimentaca
             + "sum(case when m.quantidade > 0 then m.quantidade * m.custoUnitario else 0 end) "
             + "from MovimentacaoEstoque m where m.criadoEm >= :desde and m.criadoEm < :ate "
             + "and m.tipo <> com.pointdofrango.estoque.TipoMovimentacao.ENTRADA "
-            + "and (m.observacao is null or m.observacao not like 'Importação desfeita%') "
+            + "and (m.observacao is null or (m.observacao not like 'Importação desfeita%' "
+            + "and m.observacao not like 'Transferido %')) "
             + "group by m.insumo.id, m.tipo")
     List<Object[]> furoPorInsumo(Instant desde, Instant ate);
 

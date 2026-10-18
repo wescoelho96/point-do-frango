@@ -35,8 +35,10 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -120,6 +122,17 @@ public class PedidoService {
     }
 
     private Pedido registrar(NovoPedidoRequest req, String usuario, DadosPlataforma plataforma) {
+        // Retroativo: venda de outro dia lançada depois pelo dono (comanda de papel).
+        boolean retroativo = plataforma == null && req.retroativo();
+        Instant realizadoEm = retroativo ? validarData(req.realizadoEm()) : null;
+        // O que já saiu da cozinha (comanda de papel, pedido do app lançado depois) baixa mesmo sem saldo no sistema.
+        boolean jaSaiu = retroativo || (plataforma != null && plataforma.jaEntregue());
+        if (!retroativo && req.itens().stream().anyMatch(i -> i.preco() != null)) {
+            throw new RegraDeNegocioException("O preço vem do cardápio; preço diferente só no lançamento de dia anterior.");
+        }
+        if (retroativo && req.comandaId() != null) {
+            throw new RegraDeNegocioException("Venda de dia anterior é lançada já paga, sem comanda.");
+        }
         // Na comanda o pagamento só é definido no fechamento; venda avulsa precisa dele agora.
         Comanda comanda = null;
         if (req.comandaId() != null) {
@@ -136,16 +149,20 @@ public class PedidoService {
         }
 
         String telefone = limpar(req.clienteTelefone()) == null ? null : Cliente.normalizarTelefone(req.clienteTelefone());
-        Entrega entrega = req.entrega() == null ? null : validarEntrega(req, comanda, telefone);
+        Entrega entrega = req.entrega() == null ? null : validarEntrega(req, comanda, telefone, retroativo);
 
         // LinkedHashMap mantém a ordem em que os itens foram lançados
         Map<Long, Integer> quantidades = new LinkedHashMap<>();
+        Map<Long, BigDecimal> precoCobrado = new HashMap<>();
         for (ItemRequest item : req.itens()) {
             quantidades.merge(item.produtoId(), item.quantidade(), Integer::sum);
+            if (item.preco() != null) {
+                precoCobrado.put(item.produtoId(), item.preco());
+            }
         }
 
         // Brinde da promoção do dia não vale para pedidos de app
-        List<Brinde> brindes = req.semPromocao() || plataforma != null ? List.of()
+        List<Brinde> brindes = req.semPromocao() || plataforma != null || retroativo ? List.of()
                 : promocoes.brindesPara(quantidades, LocalDate.now(clock.withZone(zona)).getDayOfWeek());
         Map<Long, Integer> saindo = new LinkedHashMap<>(quantidades);
         brindes.forEach(b -> saindo.merge(b.produtoId(), b.quantidade(), Integer::sum));
@@ -166,10 +183,10 @@ public class PedidoService {
         consumoTotal.replaceAll((insumoId, qtd) -> qtd.setScale(6, RoundingMode.HALF_UP));
 
         // Trava todos os insumos antes de baixar qualquer um
-        Map<Long, Insumo> insumos = estoqueService.travarEConferir(consumoTotal);
+        Map<Long, Insumo> insumos = estoqueService.travarEConferir(consumoTotal, !jaSaiu);
 
         // Custo dos itens congelado com o custo médio lido sob a trava
-        Instant agora = Instant.now(clock);
+        Instant agora = retroativo ? realizadoEm : Instant.now(clock);
         String endereco = entrega != null ? entrega.enderecoCompleto() : limpar(req.enderecoEntrega());
         Pedido pedido = new Pedido(req.canal(), req.formaPagamento(),
                 new Pedido.DadosCliente(limpar(req.clienteNome()), telefone, endereco, limpar(req.observacao())),
@@ -177,7 +194,13 @@ public class PedidoService {
         Function<Long, BigDecimal> custoDe = produtoId -> fichaPorProduto.getOrDefault(produtoId, List.of())
                 .stream().map(l -> l.quantidade().multiply(insumos.get(l.insumoId()).getCustoUnitario()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        quantidades.forEach((produtoId, qtd) -> pedido.adicionarItem(produtos.get(produtoId), qtd, custoDe.apply(produtoId)));
+        quantidades.forEach((produtoId, qtd) -> {
+            if (retroativo) {
+                pedido.adicionarItem(produtos.get(produtoId), qtd, custoDe.apply(produtoId), precoCobrado.get(produtoId));
+            } else {
+                pedido.adicionarItem(produtos.get(produtoId), qtd, custoDe.apply(produtoId));
+            }
+        });
         brindes.forEach(b -> pedido.adicionarBrinde(produtos.get(b.produtoId()), b.quantidade(), custoDe.apply(b.produtoId()),
                 b.promocao()));
 
@@ -195,7 +218,7 @@ public class PedidoService {
         if (plataforma == null) {
             pedido.fecharValores(configuracaoService.obter());
             // Sem item de preparo (ex.: só bebida) não entra na fila da cozinha
-            if (quantidades.keySet().stream().noneMatch(id -> produtos.get(id).isVaiParaCozinha())) {
+            if (retroativo || quantidades.keySet().stream().noneMatch(id -> produtos.get(id).isVaiParaCozinha())) {
                 pedido.registrarComoJaEntregue(agora);
             }
         } else {
@@ -222,7 +245,7 @@ public class PedidoService {
 
         // Salva antes da baixa: o extrato do estoque referencia o id do pedido
         pedidos.save(pedido);
-        estoqueService.baixarParaPedido(insumos, consumoTotal, pedido.getId(), usuario);
+        estoqueService.baixarParaPedido(insumos, consumoTotal, pedido.getId(), usuario, jaSaiu);
 
         log.info("Pedido #{} lançado ({}, {}) total={} por {}", pedido.getId(), pedido.getCanal(),
                 pedido.getFormaPagamento(), pedido.getValorTotal(), usuario);
@@ -243,11 +266,25 @@ public class PedidoService {
         }
     }
 
-    private Entrega validarEntrega(NovoPedidoRequest req, Comanda comanda, String telefone) {
+    /** Venda de dia anterior: até 31 dias atrás e nunca no futuro. */
+    private Instant validarData(LocalDateTime realizadoEm) {
+        Instant agora = Instant.now(clock);
+        Instant quando = realizadoEm.atZone(zona).toInstant();
+        if (quando.isAfter(agora.plusSeconds(300))) {
+            throw new RegraDeNegocioException("A data/hora do pedido não pode estar no futuro.");
+        }
+        if (quando.isBefore(agora.minus(Duration.ofDays(31)))) {
+            throw new RegraDeNegocioException("Só é possível lançar pedidos dos últimos 31 dias.");
+        }
+        return quando;
+    }
+
+    private Entrega validarEntrega(NovoPedidoRequest req, Comanda comanda, String telefone, boolean retroativo) {
         if (comanda != null || (req.canal() != CanalVenda.WHATSAPP && req.canal() != CanalVenda.TELEFONE)) {
             throw new RegraDeNegocioException("Entrega só vale para pedidos de WhatsApp ou telefone.");
         }
-        if (limpar(req.clienteNome()) == null || telefone == null || limpar(req.enderecoEntrega()) == null) {
+        // Na comanda de papel o telefone nem sempre foi anotado; no pedido do dia ele é obrigatório.
+        if (limpar(req.clienteNome()) == null || (telefone == null && !retroativo) || limpar(req.enderecoEntrega()) == null) {
             throw new RegraDeNegocioException("Para entrega, informe nome, telefone e endereço do cliente.");
         }
         Bairro bairro = cadastros.bairro(req.entrega().bairroId());

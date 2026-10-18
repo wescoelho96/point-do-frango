@@ -175,7 +175,7 @@ public class SaidaService {
             caixa.registrarSaida(CategoriaSaida.INSUMOS, compra.descricao(), compra.valor(), FormaPagamento.DINHEIRO,
                     null, pg.fornecedorId(), compra.usuario());
         } else {
-            lancarParcelado(new NovaSaida(null, CategoriaSaida.INSUMOS, compra.descricao(), compra.valor(), pg.forma(),
+            lancarParcelado(new NovaSaida(compra.data(), CategoriaSaida.INSUMOS, compra.descricao(), compra.valor(), pg.forma(),
                     pg.fornecedorId(), null, null), pg.parcelas(), compra.usuario());
         }
     }

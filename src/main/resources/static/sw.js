@@ -2,14 +2,14 @@
 // ninguém fica preso numa versão antiga.
 // /api/* nunca passa pelo cache: pedido e financeiro têm que vir sempre atualizados e não
 // devem ficar salvos no aparelho.
-const VERSAO = 'pdf-v27';
+const VERSAO = 'pdf-v29';
 const ESSENCIAIS = [
   '/', '/index.html', '/offline.html', '/manifest.webmanifest', '/icons/favicon-64.png', '/img/logo.jpg',
   '/css/app.css', '/icons/icon-192.png', '/icons/icon-512.png',
   '/js/main.js', '/js/api.js', '/js/ui.js', '/js/tempo-real.js', '/js/imprimir.js',
   '/js/views/pdv.js', '/js/views/comandas.js', '/js/views/cozinha.js', '/js/views/pedidos.js',
   '/js/views/estoque.js', '/js/views/cardapio.js', '/js/views/financeiro.js', '/js/views/config.js',
-  '/js/views/potes.js', '/js/views/entregas.js', '/js/views/caixa.js', '/js/views/clientes.js', '/js/views/saidas.js', '/js/views/contador.js', '/js/views/nota-fiscal.js', '/js/item-compra.js', '/js/graficos.js', '/js/views/estoque-abas.js',
+  '/js/views/potes.js', '/js/views/entregas.js', '/js/views/caixa.js', '/js/views/clientes.js', '/js/views/saidas.js', '/js/views/contador.js', '/js/views/nota-fiscal.js', '/js/item-compra.js', '/js/graficos.js', '/js/views/estoque-abas.js', '/js/views/vendas.js',
 ];
 
 self.addEventListener('install', (ev) => {

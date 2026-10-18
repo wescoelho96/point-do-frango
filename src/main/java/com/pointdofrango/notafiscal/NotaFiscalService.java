@@ -5,6 +5,7 @@ import com.pointdofrango.estoque.EstoqueDtos.EntradaRequest;
 import com.pointdofrango.estoque.EstoqueService;
 import com.pointdofrango.estoque.MovimentacaoEstoque;
 import com.pointdofrango.estoque.InsumoExcluido;
+import com.pointdofrango.estoque.InsumosJuntados;
 import com.pointdofrango.financeiro.CategoriaSaida;
 import com.pointdofrango.financeiro.FormaPagamento;
 import com.pointdofrango.loja.LojaService;
@@ -162,6 +163,11 @@ public class NotaFiscalService {
         notas.save(new NotaFiscalCompra(nota, fornecedor.getId(), usuario, Instant.now(clock)));
         log.info("NF-e {} importada por {}: {} entrada(s), total {}", nota.chave(), usuario, entradas, nota.valorTotal());
         return new Resultado(nota.chave(), entradas, nota.itens().size() - entradas, nota.valorTotal());
+    }
+
+    @EventListener
+    public void aoJuntarInsumos(InsumosJuntados evento) {
+        itensFornecedor.findByInsumoId(evento.origemId()).forEach(i -> i.transferirPara(evento.destinoId()));
     }
 
     /** Insumo apagado: a próxima nota deste fornecedor volta a pedir a ligação do item. */

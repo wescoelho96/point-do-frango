@@ -90,6 +90,12 @@ public class InsumoController {
         return Map.of("ajustados", service.registrarContagem(req, auth.getName()));
     }
 
+    @PostMapping("/{id}/juntar")
+    @Operation(summary = "Junta este cadastro (duplicado) em outro: saldo, custo, validades e ligações de nota")
+    public InsumoResponse juntar(@PathVariable Long id, @RequestParam Long destino, Authentication auth) {
+        return InsumoResponse.de(service.juntar(id, destino, auth.getName()));
+    }
+
     @GetMapping("/ultimas-entradas")
     @Operation(summary = "Última entrada de cada insumo nos últimos dias (o que acabou de chegar e de onde veio)")
     public List<UltimaEntrada> ultimasEntradas() {

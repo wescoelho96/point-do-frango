@@ -55,6 +55,10 @@ public class ItemFornecedor {
         return codigoProduto;
     }
 
+    void transferirPara(Long insumoId) {
+        this.insumoId = insumoId;
+    }
+
     public Long getInsumoId() {
         return insumoId;
     }

@@ -22,8 +22,16 @@ public final class PedidoDtos {
     private PedidoDtos() {
     }
 
-    /** Sem preço de propósito: o valor sempre vem do cardápio. */
-    public record ItemRequest(@NotNull Long produtoId, @Min(1) @Max(99) int quantidade) {
+    /**
+     * O valor vem do cardápio. preco só é aceito no lançamento retroativo do dono, para registrar
+     * o que foi cobrado de fato naquele dia.
+     */
+    public record ItemRequest(@NotNull Long produtoId, @Min(1) @Max(99) int quantidade,
+                              @DecimalMin("0") @DecimalMax("9999") BigDecimal preco) {
+
+        public ItemRequest(Long produtoId, int quantidade) {
+            this(produtoId, quantidade, null);
+        }
     }
 
     /** Sem comandaId é venda direta e a forma de pagamento é obrigatória; com comandaId ela fica para o fechamento. */
@@ -43,7 +51,21 @@ public final class PedidoDtos {
             @DecimalMin("0") @DecimalMax("99999") BigDecimal valorRecebido,
             boolean salvarCliente,
             /* obrigatório na cortesia */
-            @Size(max = 150) String motivoCortesia) {
+            @Size(max = 150) String motivoCortesia,
+            /* lançamento retroativo (só o dono): venda de um dia anterior, já entregue */
+            LocalDateTime realizadoEm) {
+
+        public NovoPedidoRequest(CanalVenda canal, FormaPagamento formaPagamento, String clienteNome,
+                                 String clienteTelefone, String enderecoEntrega, String observacao,
+                                 List<ItemRequest> itens, Long comandaId, EntregaRequest entrega, boolean semPromocao,
+                                 BigDecimal valorRecebido, boolean salvarCliente, String motivoCortesia) {
+            this(canal, formaPagamento, clienteNome, clienteTelefone, enderecoEntrega, observacao, itens, comandaId,
+                    entrega, semPromocao, valorRecebido, salvarCliente, motivoCortesia, null);
+        }
+
+        public boolean retroativo() {
+            return realizadoEm != null;
+        }
 
         public NovoPedidoRequest(CanalVenda canal, FormaPagamento formaPagamento, String clienteNome,
                                  String clienteTelefone, String enderecoEntrega, String observacao,

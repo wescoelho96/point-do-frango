@@ -405,6 +405,19 @@ td .sub.good { color: var(--good-text); }
 .hbarra-trilho { height: 14px; border-left: 1px solid var(--baseline); display: flex; align-items: center; }
 .hbarra-barra { display: block; height: 12px; background: var(--pote-reposicao); border-radius: 0 4px 4px 0; min-width: 2px; }
 .hbarra:hover .hbarra-barra { filter: brightness(1.15); }
+.meta-linha { display: grid; grid-template-columns: minmax(90px, 38%) 1fr auto; gap: 8px; align-items: center; font-size: .85rem; cursor: default; }
+.meta-trilho { position: relative; height: 14px; border-left: 1px solid var(--baseline); display: flex; align-items: center; }
+.meta-feito { display: block; height: 12px; background: var(--pote-reposicao); border-radius: 0 4px 4px 0; min-width: 2px; }
+.meta-feito.batida, .coluna-barra.batida { background: var(--good); }
+.meta-alvo { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: var(--text); }
+.colunas { display: flex; align-items: stretch; gap: 4px; height: 180px; margin-top: 8px; }
+.coluna { flex: 1; display: flex; flex-direction: column; min-width: 0; cursor: default; }
+.coluna-area { position: relative; flex: 1; border-bottom: 1px solid var(--baseline); display: flex; align-items: flex-end; }
+.coluna-barra { position: relative; z-index: 1; display: block; width: 70%; margin: 0 auto; background: var(--pote-reposicao); border-radius: 4px 4px 0 0; }
+.coluna-media { position: absolute; left: 0; right: 0; bottom: 0; border-top: 2px solid var(--text); background: color-mix(in srgb, var(--text) 10%, transparent); border-radius: 4px 4px 0 0; }
+.coluna-rotulo { font-size: .7rem; text-align: center; color: var(--text-2); margin-top: 2px; }
+.coluna:hover .coluna-barra { filter: brightness(1.15); }
+.chip.chip-linha { --c: color-mix(in srgb, var(--text) 10%, transparent); border-top: 2px solid var(--text); }
 .hbarra-valor { color: var(--text); white-space: nowrap; font-weight: 600; }
 .empilhada { display: flex; gap: 2px; height: 22px; margin-top: 10px; }
 .empilhada > span { border-radius: 4px; min-width: 4px; }

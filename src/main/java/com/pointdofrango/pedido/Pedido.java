@@ -177,6 +177,15 @@ public class Pedido {
         itens.add(new ItemPedido(this, produto, quantidade, custoUnitario));
     }
 
+    /** Lançamento retroativo com o preço cobrado na época (produto pode estar inativo hoje). */
+    public void adicionarItem(Produto produto, int quantidade, BigDecimal custoUnitario, BigDecimal precoCobrado) {
+        if (quantidade <= 0) {
+            throw new RegraDeNegocioException("Quantidade deve ser maior que zero.");
+        }
+        itens.add(ItemPedido.comPreco(this, produto, quantidade, custoUnitario,
+                precoCobrado != null ? precoCobrado : produto.getPrecoVenda()));
+    }
+
     /** Cortesia: todos os itens com preço zero. Chamado antes de fechar os valores. */
     void tornarCortesia(String motivo) {
         if (motivo == null || motivo.isBlank()) {

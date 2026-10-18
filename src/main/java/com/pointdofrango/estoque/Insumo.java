@@ -209,8 +209,16 @@ public class Insumo {
 
     /** Quem chama já conferiu o saldo (EstoqueService.travarEConferir). */
     void baixar(BigDecimal quantidade) {
+        baixar(quantidade, false);
+    }
+
+    /**
+     * permitirNegativo: venda de dia anterior lançada depois (o produto já saiu de verdade); o saldo
+     * negativo aponta que falta lançar compra ou fazer a contagem.
+     */
+    void baixar(BigDecimal quantidade, boolean permitirNegativo) {
         positivo(quantidade);
-        if (!possui(quantidade)) {
+        if (!permitirNegativo && !possui(quantidade)) {
             throw new RegraDeNegocioException("Estoque insuficiente de " + nome);
         }
         estoqueAtual = estoqueAtual.subtract(quantidade);

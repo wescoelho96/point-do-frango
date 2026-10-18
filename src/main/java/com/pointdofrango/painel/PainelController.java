@@ -21,13 +21,21 @@ import java.util.List;
 public class PainelController {
 
     private final PainelService service;
+    private final PainelVendasService vendas;
     private final Clock clock;
     private final ZoneId zona;
 
-    public PainelController(PainelService service, Clock clock, ZoneId zona) {
+    public PainelController(PainelService service, PainelVendasService vendas, Clock clock, ZoneId zona) {
+        this.vendas = vendas;
         this.service = service;
         this.clock = clock;
         this.zona = zona;
+    }
+
+    @GetMapping("/vendas")
+    @Operation(summary = "Vendas de hoje contra a média dos dias anteriores (metas), por hora, por dia da semana e por produto")
+    public PainelVendasService.PainelVendas vendas(@RequestParam(defaultValue = "30") int dias) {
+        return vendas.painel(dias);
     }
 
     @GetMapping("/margens")

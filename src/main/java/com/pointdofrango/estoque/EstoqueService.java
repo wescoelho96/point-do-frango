@@ -136,6 +136,49 @@ public class EstoqueService {
                 .toList();
     }
 
+    /** Prefixo das movimentações de quando dois cadastros do mesmo item são juntados. */
+    public static final String TRANSFERENCIA = "Transferido ";
+
+    /**
+     * Junta um cadastro duplicado no outro (ex.: "Sassami Seara" no "Filé de frango"): o saldo e o valor passam
+     * para o destino pelo custo médio, a origem fica zerada e inativa, e validades e ligações de nota acompanham.
+     */
+    @Transactional
+    public Insumo juntar(Long origemId, Long destinoId, String usuario) {
+        if (origemId.equals(destinoId)) {
+            throw new RegraDeNegocioException("Escolha outro item para juntar.");
+        }
+        Insumo origemLida = buscar(origemId);
+        Insumo destinoLido = buscar(destinoId);
+        if (origemLida.getUnidade() != destinoLido.getUnidade()) {
+            throw new RegraDeNegocioException("Só dá para juntar itens controlados na mesma unidade ("
+                    + origemLida.getUnidade().getSigla() + " e " + destinoLido.getUnidade().getSigla() + ").");
+        }
+        if (insumos.usadoEmFichaTecnica(origemId)) {
+            throw new RegraDeNegocioException(origemLida.getNome() + " está em ficha técnica. Troque nas fichas pelo "
+                    + destinoLido.getNome() + " antes de juntar.");
+        }
+        // trava na ordem dos ids, como na venda, para não dar deadlock
+        Map<Long, Insumo> travados = insumos.travarPorIds(List.of(origemId, destinoId)).stream()
+                .collect(Collectors.toMap(Insumo::getId, Function.identity()));
+        Insumo origem = travados.get(origemId);
+        Insumo destino = travados.get(destinoId);
+        BigDecimal saldo = origem.getEstoqueAtual();
+        if (saldo.signum() < 0) {
+            throw new RegraDeNegocioException(origem.getNome() + " está com saldo negativo. Faça a contagem antes de juntar.");
+        }
+        if (saldo.signum() > 0) {
+            destino.darEntrada(saldo, saldo.multiply(origem.getCustoUnitario()));
+            registrar(destino, TipoMovimentacao.AJUSTE, saldo, null, TRANSFERENCIA + "de " + origem.getNome(), usuario);
+            origem.ajustarPara(BigDecimal.ZERO);
+            registrar(origem, TipoMovimentacao.AJUSTE, saldo.negate(), null, TRANSFERENCIA + "para " + destino.getNome(), usuario);
+        }
+        origem.desativar();
+        lotes.transferir(origemId, destinoId);
+        eventos.publishEvent(new InsumosJuntados(origemId, destinoId));
+        return destino;
+    }
+
     /** Prefixo do ajuste que registra o estorno de uma compra importada. */
     public static final String ESTORNO_DE_IMPORTACAO = "Importação desfeita: ";
 
@@ -214,7 +257,7 @@ public class EstoqueService {
         }
         if (req.pagamento() != null && total.signum() > 0) {
             eventos.publishEvent(new CompraDeInsumoPaga(observacao + " (" + itens.size() + " itens)", total,
-                    req.pagamento(), usuario));
+                    req.pagamento(), usuario, req.data()));
         }
         return new CompraResponse(itens.size(), Dinheiro.centavos(total));
     }
@@ -288,6 +331,11 @@ public class EstoqueService {
      */
     @Transactional
     public Map<Long, Insumo> travarEConferir(Map<Long, BigDecimal> consumo) {
+        return travarEConferir(consumo, true);
+    }
+
+    /** exigirSaldo false: lançamento retroativo, o que foi vendido já saiu do estoque de verdade. */
+    public Map<Long, Insumo> travarEConferir(Map<Long, BigDecimal> consumo, boolean exigirSaldo) {
         Map<Long, Insumo> travados = insumos.travarPorIds(consumo.keySet()).stream()
                 .collect(Collectors.toMap(Insumo::getId, Function.identity()));
 
@@ -297,7 +345,7 @@ public class EstoqueService {
             if (insumo == null) {
                 throw new RecursoNaoEncontradoException("Insumo", insumoId);
             }
-            if (!insumo.possui(necessario)) {
+            if (exigirSaldo && !insumo.possui(necessario)) {
                 faltas.add(new EstoqueInsuficienteException.Falta(insumo.getNome(), necessario,
                         insumo.getEstoqueAtual(), insumo.getUnidade().getSigla()));
             }
@@ -311,9 +359,14 @@ public class EstoqueService {
     /** Baixa o consumo já conferido por {@link #travarEConferir} e registra no extrato. */
     @Transactional
     public void baixarParaPedido(Map<Long, Insumo> travados, Map<Long, BigDecimal> consumo, Long pedidoId, String usuario) {
+        baixarParaPedido(travados, consumo, pedidoId, usuario, false);
+    }
+
+    public void baixarParaPedido(Map<Long, Insumo> travados, Map<Long, BigDecimal> consumo, Long pedidoId, String usuario,
+                                 boolean permitirNegativo) {
         consumo.forEach((insumoId, quantidade) -> {
             Insumo insumo = travados.get(insumoId);
-            insumo.baixar(quantidade);
+            insumo.baixar(quantidade, permitirNegativo);
             registrar(insumo, TipoMovimentacao.SAIDA_VENDA, quantidade.negate(), pedidoId, null, usuario);
         });
     }
@@ -339,11 +392,11 @@ public class EstoqueService {
     /** Consumo da equipe: sai do estoque sem pedido e sem receita. */
     @Transactional
     public List<MovimentacaoEstoque> baixarConsumoInterno(Map<Long, Insumo> travados, Map<Long, BigDecimal> consumo,
-                                                          String motivo, String usuario) {
+                                                          String motivo, String usuario, boolean permitirNegativo) {
         List<MovimentacaoEstoque> registradas = new ArrayList<>();
         consumo.forEach((insumoId, quantidade) -> {
             Insumo insumo = travados.get(insumoId);
-            insumo.baixar(quantidade);
+            insumo.baixar(quantidade, permitirNegativo);
             registradas.add(registrar(insumo, TipoMovimentacao.CONSUMO_INTERNO, quantidade.negate(), null, motivo, usuario));
         });
         return registradas;

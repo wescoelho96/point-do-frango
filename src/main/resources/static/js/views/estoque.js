@@ -300,7 +300,9 @@ export async function montar(container, params = {}) {
             por <input name="pagoQuantidade" inputmode="decimal" placeholder="6" style="width:80px" aria-label="Quantidade comprada"> <span data-sigla>${sigla}</span>
             <span class="muted" data-pago-resultado></span>
           </div></div>
-        ${novo ? html`<label class="field"><span>Estoque inicial (<span data-sigla>${sigla}</span>)</span><input name="estoqueInicial" inputmode="decimal" value="0"></label>` : ''}
+        ${novo ? html`<label class="field"><span>Estoque inicial (<span data-sigla>${sigla}</span>)</span><input name="estoqueInicial" inputmode="decimal" value="0"></label>`
+          : html`<label class="field"><span>Em estoque agora (<span data-sigla>${sigla}</span>)</span>
+              <input name="saldoAtual" inputmode="decimal" value="${numero(i.estoqueAtual)}" title="Mudou? Fica registrado como contagem no extrato"></label>`}
       </div>
 
       ${secaoVenda(novo ? null : i)}
@@ -747,6 +749,27 @@ export async function montar(container, params = {}) {
     });
   }
 
+  /** Cadastro duplicado: passa saldo, custo, validades e ligações de nota para o item que fica. */
+  function abrirJuntar(i) {
+    const opcoes = insumos.filter((x) => x.ativo && x.id !== i.id && x.unidade === i.unidade);
+    modal({
+      titulo: `Juntar ${i.nome}`,
+      corpo: html`
+        <p class="text-2" style="margin:0">Os ${numero(i.estoqueAtual)} ${i.sigla} de <strong>${i.nome}</strong> passam para o item escolhido,
+          pelo custo médio. ${i.nome} fica zerado e inativo; as próximas notas desse produto já caem no item escolhido.</p>
+        <label class="field">Juntar em
+          <select name="destino" required><option value="">Escolha…</option>
+            ${opcoes.map((x) => html`<option value="${x.id}">${x.nome} (${numero(x.estoqueAtual)} ${x.sigla})</option>`)}</select></label>`,
+      textoSalvar: 'Juntar',
+      aoSalvar: async (d) => {
+        if (!d.destino) throw new Error('Escolha o item que vai ficar.');
+        const r = await api.post(`/insumos/${i.id}/juntar?destino=${d.destino}`);
+        toast(`Juntado em ${r.nome}: agora ${numero(r.estoqueAtual)} ${r.sigla}`);
+        await carregar();
+      },
+    });
+  }
+
   function confirmarExclusao(i) {
     const juntos = soDesteInsumo(i).map((p) => p.nome).join(', ');
     modal({
@@ -820,10 +843,17 @@ export async function montar(container, params = {}) {
         corpo: html`${formInsumo(i)}
           <div class="row" style="justify-content:space-between">
             <label class="row" style="gap:6px"><input type="checkbox" name="ativo" ${i.ativo ? 'checked' : ''} style="width:auto"> Ativo</label>
-            <button type="button" class="btn btn-sm btn-danger" data-excluir>Excluir insumo</button>
+            <div class="row">
+              <button type="button" class="btn btn-sm" data-juntar title="Cadastro duplicado (ex.: o mesmo frango de outra marca)">Juntar com outro item</button>
+              <button type="button" class="btn btn-sm btn-danger" data-excluir>Excluir insumo</button>
+            </div>
           </div>`,
         aoAbrir: (form) => {
           prepararFormInsumo(form);
+          form.querySelector('[data-juntar]').addEventListener('click', () => {
+            document.getElementById('modal').close();
+            abrirJuntar(i);
+          });
           form.querySelector('[data-excluir]').addEventListener('click', () => {
             document.getElementById('modal').close();
             confirmarExclusao(i);
@@ -834,6 +864,11 @@ export async function montar(container, params = {}) {
           const preco = decimal(d.precoVenda);
           if (d.vender === 'on' && !preco) throw new Error('Informe o preço de venda.');
           await api.put(`/insumos/${i.id}`, corpoInsumo(d, form));
+          const saldo = decimal(d.saldoAtual);
+          if (saldo != null && Math.abs(saldo - Number(i.estoqueAtual)) > 0.0005) {
+            if (saldo < 0) throw new Error('A quantidade em estoque não pode ser negativa.');
+            await api.post(`/insumos/${i.id}/ajustes`, { quantidadeContada: saldo, motivo: 'Correção no cadastro' });
+          }
           const ativo = d.ativo === 'on';
           if (ativo !== i.ativo) await api.patch(`/insumos/${i.id}/ativo?valor=${ativo}`);
           if (revenda && preco && preco !== Number(revenda.precoVenda)) {

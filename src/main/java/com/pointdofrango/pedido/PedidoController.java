@@ -49,6 +49,9 @@ public class PedidoController {
         if (req.formaPagamento() == FormaPagamento.CORTESIA && !admin(auth)) {
             throw new AccessDeniedException("Só o dono pode lançar cortesia.");
         }
+        if ((req.retroativo() || req.itens().stream().anyMatch(i -> i.preco() != null)) && !admin(auth)) {
+            throw new AccessDeniedException("Só o dono pode lançar venda de dia anterior.");
+        }
         return visivelPara(auth, service.lancar(req, auth.getName()));
     }
 

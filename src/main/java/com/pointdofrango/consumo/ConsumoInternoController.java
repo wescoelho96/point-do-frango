@@ -13,6 +13,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -40,7 +41,9 @@ public class ConsumoInternoController {
 
     public record ConsumoRequest(@NotBlank @Size(max = 150) String motivo,
                                  @Size(max = 30) List<@Valid ItemProduto> produtos,
-                                 @Size(max = 30) List<@Valid ItemInsumo> insumos) {
+                                 @Size(max = 30) List<@Valid ItemInsumo> insumos,
+                                 /* lançado depois (só o dono): baixa mesmo sem saldo no sistema */
+                                 boolean jaConsumido) {
     }
 
     /** custo só para ADMIN. */
@@ -64,9 +67,13 @@ public class ConsumoInternoController {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Registra o consumo da equipe (por produto, pela ficha técnica, ou por insumo)")
     public List<BaixaResponse> registrar(@Valid @RequestBody ConsumoRequest req, Authentication auth) {
+        if (req.jaConsumido() && !admin(auth)) {
+            throw new AccessDeniedException("Só o dono pode lançar consumo de outro dia.");
+        }
         var baixas = service.registrar(req.motivo(),
                 ConsumoInternoService.somarProdutos(req.produtos() == null ? List.of() : req.produtos()),
-                ConsumoInternoService.somarInsumos(req.insumos() == null ? List.of() : req.insumos()), auth.getName());
+                ConsumoInternoService.somarInsumos(req.insumos() == null ? List.of() : req.insumos()), auth.getName(),
+                req.jaConsumido());
         return baixas.stream().map(m -> BaixaResponse.de(m, admin(auth))).toList();
     }
 

@@ -4,6 +4,7 @@ import { ativarTooltips, blocoPotes, totalEquipe } from './potes.js';
 import * as saidas from './saidas.js';
 import { abas } from './saidas.js';
 import * as contador from './contador.js';
+import * as vendas from './vendas.js';
 
 const PERIODOS = [
   { id: 'hoje', nome: 'Hoje', intervalo: (h) => [h, h] },
@@ -16,6 +17,7 @@ export async function montar(container, params = {}) {
   if (params.aba === 'saidas') return saidas.montar(container);
   if (params.aba === 'fornecedores') return saidas.montarFornecedores(container);
   if (params.aba === 'contador') return contador.montar(container);
+  if (params.aba === 'metas') return vendas.montar(container);
   let periodo = 'hoje';
   let [inicio, fim] = PERIODOS[0].intervalo(hojeISO());
   let r = null;

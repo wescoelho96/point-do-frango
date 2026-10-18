@@ -307,7 +307,11 @@ O custo médio do insumo é recalculado com o valor da compra. Pagamento com din
 
 **Separar para repor:** a coluna **Separar p/ repor** mostra, para cada item, o custo do que foi vendido desde a última compra. É o valor a guardar para comprar o mesmo item de novo. O topo da tela mostra o total. Ao registrar uma nova **Entrada** do item, o valor volta a zero.
 
-Outros botões da linha: **Editar** (dados, embalagens, mínimo, ativo), o botão de duplicar (cria um insumo parecido, como outro sabor ou tamanho), **Rende** (quantas porções o saldo permite fazer e, para o dono, o lucro por kg ou unidade) e **Extrato** (histórico de movimentações). Novos insumos são criados em **+ Novo insumo**.
+**Corrigir a quantidade:** em **Editar**, o campo **Em estoque agora** mostra o saldo do sistema. Ao trocar o número e salvar, a diferença fica registrada no **Extrato** como correção, igual a uma contagem.
+
+**Juntar cadastros repetidos:** quando o mesmo ingrediente entrou com dois nomes (outra marca, outro nome na nota), abra **Editar** no cadastro que vai sair e clique em **Juntar com outro item**. O saldo passa para o item escolhido pelo custo médio, as validades vão junto e as próximas notas desse produto já caem no item que ficou. O cadastro antigo fica zerado e inativo.
+
+Outros botões da linha: **Editar** (dados, quantidade, embalagens, mínimo, ativo), o botão de duplicar (cria um insumo parecido, como outro sabor ou tamanho), **Rende** (quantas porções o saldo permite fazer e, para o dono, o lucro por kg ou unidade) e **Extrato** (histórico de movimentações). Novos insumos são criados em **+ Novo insumo**.
 
 ![Lucro por kg](img/margem-por-kg.png)
 
@@ -419,6 +423,17 @@ A aba **Vendas e potes** mostra, para o período escolhido (Hoje, 7 dias, 30 dia
 ![Financeiro](img/financeiro.png)
 
 Quando as vendas não cobrem custos, contas e taxas, aparece um aviso de prejuízo.
+
+### Metas e gráficos
+
+A aba **Metas e gráficos** compara o dia de hoje com a média dos últimos 14, 30, 60 ou 90 dias. A média considera só os dias em que houve venda, para que dias fechados não baixem a meta.
+
+- **Vendido hoje**, **Pedidos hoje** e **Falta para a meta do dia**: quanto falta para igualar a média diária. Ao bater a meta, o indicador ganha o ✅.
+- **Metas de hoje por produto**: a barra é o que já saiu hoje e o traço é a média por dia de venda daquele produto.
+- **Venda por hora**: o faturamento de cada hora de hoje (barra) contra a média daquele horário (área sombreada).
+- **Produtos que mais saem** e **Média por dia da semana**, para planejar compra e equipe.
+
+Cancelados e cortesias não entram nas metas. Passe o mouse (ou toque) sobre uma barra para ver os números.
 
 ### Relatório para o contador
 

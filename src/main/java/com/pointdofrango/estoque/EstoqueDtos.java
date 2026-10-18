@@ -103,10 +103,16 @@ public final class EstoqueDtos {
     }
 
     /** Compra com vários itens e um só pagamento (cupom de mercado, compra sem nota). */
+    /** data: dia da compra (o pagamento entra nas saídas nesse dia); nulo = hoje. */
     public record CompraRequest(
             @NotEmpty @Size(max = 60) List<@Valid ItemCompra> itens,
             @Size(max = 255) String observacao,
-            @Valid PagamentoCompra pagamento) {
+            @Valid PagamentoCompra pagamento,
+            LocalDate data) {
+
+        public CompraRequest(List<ItemCompra> itens, String observacao, PagamentoCompra pagamento) {
+            this(itens, observacao, pagamento, null);
+        }
     }
 
     public record ItemCompra(

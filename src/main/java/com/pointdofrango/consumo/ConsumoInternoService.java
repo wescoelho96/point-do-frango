@@ -43,6 +43,13 @@ public class ConsumoInternoService {
     @Transactional
     public List<MovimentacaoEstoque> registrar(String motivo, Map<Long, Integer> porProduto,
                                                Map<Long, BigDecimal> porInsumo, String usuario) {
+        return registrar(motivo, porProduto, porInsumo, usuario, false);
+    }
+
+    /** jaConsumido: a refeição já aconteceu; baixa mesmo que o sistema ainda não tenha o saldo (falta contagem). */
+    @Transactional
+    public List<MovimentacaoEstoque> registrar(String motivo, Map<Long, Integer> porProduto,
+                                               Map<Long, BigDecimal> porInsumo, String usuario, boolean jaConsumido) {
         if (porProduto.isEmpty() && porInsumo.isEmpty()) {
             throw new RegraDeNegocioException("Informe pelo menos um produto ou insumo consumido.");
         }
@@ -56,8 +63,8 @@ public class ConsumoInternoService {
         }
         consumo.replaceAll((id, qtd) -> qtd.setScale(6, RoundingMode.HALF_UP));
 
-        Map<Long, Insumo> travados = estoque.travarEConferir(consumo);
-        List<MovimentacaoEstoque> baixas = estoque.baixarConsumoInterno(travados, consumo, motivo.strip(), usuario);
+        Map<Long, Insumo> travados = estoque.travarEConferir(consumo, !jaConsumido);
+        List<MovimentacaoEstoque> baixas = estoque.baixarConsumoInterno(travados, consumo, motivo.strip(), usuario, jaConsumido);
         log.info("Consumo interno por {}: {} insumo(s) ({})", usuario, baixas.size(), motivo);
         return baixas;
     }
