@@ -54,6 +54,10 @@ public class ItemFichaTecnica {
     @Column(nullable = false, precision = 20, scale = 10)
     private BigDecimal quantidade;
 
+    /** Embalagem de viagem: não sai quando o cliente come na mesa. */
+    @Column(name = "so_para_viagem", nullable = false)
+    private boolean soParaViagem;
+
     protected ItemFichaTecnica() {
     }
 
@@ -62,7 +66,8 @@ public class ItemFichaTecnica {
         this.insumo = insumo;
     }
 
-    void definir(ModoQuantidade modo, BigDecimal informada, EmbalagemCompra embalagem) {
+    void definir(ModoQuantidade modo, BigDecimal informada, EmbalagemCompra embalagem, boolean soParaViagem) {
+        this.soParaViagem = soParaViagem;
         this.modo = modo;
         this.quantidadeInformada = informada;
         this.embalagem = modo == ModoQuantidade.RENDIMENTO_EMBALAGEM ? embalagem : null;
@@ -118,6 +123,10 @@ public class ItemFichaTecnica {
 
     public EmbalagemCompra getEmbalagem() {
         return embalagem;
+    }
+
+    public boolean isSoParaViagem() {
+        return soParaViagem;
     }
 
     public BigDecimal getQuantidade() {

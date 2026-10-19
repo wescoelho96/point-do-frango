@@ -33,7 +33,7 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
      * seguinte devolveria essas instâncias com o saldo antigo.
      */
     @Query("""
-            select new com.pointdofrango.produto.ConsumoFicha(f.produto.id, f.insumo.id, f.quantidade)
+            select new com.pointdofrango.produto.ConsumoFicha(f.produto.id, f.insumo.id, f.quantidade, f.soParaViagem)
             from ItemFichaTecnica f where f.produto.id in :produtoIds
             """)
     List<ConsumoFicha> consumoDosProdutos(Collection<Long> produtoIds);

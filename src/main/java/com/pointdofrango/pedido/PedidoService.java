@@ -172,7 +172,11 @@ public class PedidoService {
         // Consumo por insumo inclui os brindes, que também saem do estoque
         Map<Long, BigDecimal> consumoTotal = new TreeMap<>();
         Map<Long, List<ConsumoFicha>> fichaPorProduto = new LinkedHashMap<>();
+        boolean naMesa = req.canal() == CanalVenda.MESA || req.comandaId() != null;
         for (ConsumoFicha linha : produtoService.consumoDosProdutos(saindo.keySet())) {
+            if (naMesa && linha.soParaViagem()) {
+                continue; // na mesa vai no prato: a caixa não sai
+            }
             fichaPorProduto.computeIfAbsent(linha.produtoId(), k -> new ArrayList<>()).add(linha);
             BigDecimal usado = linha.quantidade().multiply(BigDecimal.valueOf(saindo.get(linha.produtoId())));
             consumoTotal.merge(linha.insumoId(), usado, BigDecimal::add);

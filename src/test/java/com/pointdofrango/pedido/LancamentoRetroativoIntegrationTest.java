@@ -7,6 +7,7 @@ import com.pointdofrango.entrega.EntregaCadastroService;
 import com.pointdofrango.estoque.EstoqueDtos.InsumoRequest;
 import com.pointdofrango.estoque.EstoqueService;
 import com.pointdofrango.estoque.Insumo;
+import com.pointdofrango.estoque.ModoQuantidade;
 import com.pointdofrango.estoque.UnidadeMedida;
 import com.pointdofrango.financeiro.FormaPagamento;
 import com.pointdofrango.painel.PainelVendasService;
@@ -161,6 +162,27 @@ class LancamentoRetroativoIntegrationTest {
                 "11999998888", "Rua Touro, 35", null, List.of(new ItemRequest(venda.getId(), 1)), null,
                 new EntregaRequest(bairro.getId(), null, motoboy.getId(), false, false, true), true, null, false, null), "dono"))
                 .isInstanceOf(RegraDeNegocioException.class).hasMessageContaining("Motoboy já pago");
+    }
+
+    @Test
+    @DisplayName("Caixa marcada só para viagem: sai na retirada, não sai quando o cliente come na mesa")
+    void caixaSoParaViagem() {
+        Insumo frango = estoque.criar(new InsumoRequest("Frango caixa " + SEQ.incrementAndGet(), UnidadeMedida.QUILOGRAMA,
+                bd("0"), bd("20"), bd("5")), "t");
+        Insumo caixa = estoque.criar(new InsumoRequest("Caixa viagem " + SEQ.get(), UnidadeMedida.UNIDADE,
+                bd("0"), bd("1"), bd("10")), "t");
+        Produto combo = produtos.criar(new ProdutoRequest("Combo caixa " + SEQ.get(), null, CategoriaProduto.COMBO, bd("55"),
+                List.of(new ItemFichaRequest(frango.getId(), ModoQuantidade.UNIDADE_BASE, bd("0.5"), null, false),
+                        new ItemFichaRequest(caixa.getId(), ModoQuantidade.UNIDADE_BASE, bd("1"), null, true))));
+        LocalDateTime ontem = LocalDateTime.now(SP).minusDays(1).withHour(20).withMinute(0).withSecond(0).withNano(0);
+
+        pedidos.lancar(new NovoPedidoRequest(CanalVenda.MESA, FormaPagamento.PIX, "Mesa 2", null, null, null,
+                List.of(new ItemRequest(combo.getId(), 1, null)), null, null, true, null, false, null, ontem), "dono");
+        assertThat(estoque.buscar(caixa.getId()).getEstoqueAtual()).isEqualByComparingTo("10");
+        assertThat(estoque.buscar(frango.getId()).getEstoqueAtual()).isEqualByComparingTo("4.5");
+
+        pedidos.lancar(retroativo(combo, FormaPagamento.PIX, null, ontem), "dono");
+        assertThat(estoque.buscar(caixa.getId()).getEstoqueAtual()).isEqualByComparingTo("9");
     }
 
     private static NovoPedidoRequest retroativo(Produto produto, FormaPagamento forma, BigDecimal preco, LocalDateTime quando) {

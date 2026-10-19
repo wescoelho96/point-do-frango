@@ -57,6 +57,9 @@ public class ConsumoInternoService {
         if (!porProduto.isEmpty()) {
             produtos.buscarVarios(porProduto.keySet());
             for (ConsumoFicha linha : produtos.consumoDosProdutos(porProduto.keySet())) {
+                if (linha.soParaViagem()) {
+                    continue; // a equipe come no prato
+                }
                 BigDecimal usado = linha.quantidade().multiply(BigDecimal.valueOf(porProduto.get(linha.produtoId())));
                 consumo.merge(linha.insumoId(), usado, BigDecimal::add);
             }

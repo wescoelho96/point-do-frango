@@ -103,7 +103,7 @@ export async function montar(container) {
                 <tr class="${p.ativo ? '' : 'inativo'}">
                   <td><strong>${p.nome}</strong>${p.ativo ? '' : html` <span class="badge">fora do cardápio</span>`}${p.vaiParaCozinha ? ''
                     : html` <span class="badge" title="Pedido só com este item não passa pela cozinha">🥤 sai do balcão</span>`}
-                    <div class="muted" style="font-size:.8rem">${p.fichaTecnica.map((f) => `${f.descricao} ${f.insumo}`).join(' · ')}</div></td>
+                    <div class="muted" style="font-size:.8rem">${p.fichaTecnica.map((f) => `${f.descricao} ${f.insumo}${f.soParaViagem ? ' (só viagem)' : ''}`).join(' · ')}</div></td>
                   <td>${p.categoriaRotulo}</td>
                   <td class="num right">${moeda(p.precoVenda)}</td>
                   <td class="num right">${moeda(p.custoAtual)}</td>
@@ -156,6 +156,9 @@ export async function montar(container) {
         <input name="quantidade" inputmode="decimal" placeholder="Qtd" aria-label="Quantidade" value="${item ? numero(item.quantidadeInformada) : ''}">
         <select name="modo" aria-label="Unidade">${opcoesModo(ins, modoAtual)}</select>
         <button type="button" class="btn btn-icon" data-remover aria-label="Remover insumo">✕</button>
+        <label class="muted" style="grid-column:1/-1;font-size:.8rem;display:flex;gap:6px;align-items:center;margin:-2px 0 0">
+          <input type="checkbox" name="soParaViagem" ${item?.soParaViagem ? 'checked' : ''} style="width:auto">
+          Só para viagem (caixa, sacola: não sai quando o cliente come na mesa)</label>
         <div class="muted" style="grid-column:1/-1;font-size:.8rem;margin-top:-2px" data-info></div>
       </div>`;
   }
@@ -233,6 +236,7 @@ export async function montar(container) {
             modo,
             embalagemId: embalagemId ? Number(embalagemId) : null,
             quantidade: decimal(l.querySelector('[name=quantidade]').value),
+            soParaViagem: l.querySelector('[name=soParaViagem]').checked,
           };
         }).filter((f) => f.quantidade);
         const corpo = {

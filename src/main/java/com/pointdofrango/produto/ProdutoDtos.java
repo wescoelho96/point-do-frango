@@ -24,7 +24,13 @@ public final class ProdutoDtos {
             @NotNull Long insumoId,
             ModoQuantidade modo,
             @NotNull @DecimalMin(value = "0", inclusive = false) BigDecimal quantidade,
-            Long embalagemId) {
+            Long embalagemId,
+            /* caixa, sacola: só sai em entrega e retirada */
+            boolean soParaViagem) {
+
+        public ItemFichaRequest(Long insumoId, ModoQuantidade modo, BigDecimal quantidade, Long embalagemId) {
+            this(insumoId, modo, quantidade, embalagemId, false);
+        }
 
         public ItemFichaRequest(Long insumoId, BigDecimal quantidade) {
             this(insumoId, ModoQuantidade.UNIDADE_BASE, quantidade, null);
@@ -56,14 +62,15 @@ public final class ProdutoDtos {
 
     public record ItemFichaResponse(Long insumoId, String insumo, String sigla, ModoQuantidade modo,
                                     BigDecimal quantidadeInformada, Long embalagemId, String descricao,
-                                    BigDecimal quantidade, BigDecimal custo, List<Rendimento> rendimentos) {
+                                    BigDecimal quantidade, BigDecimal custo, List<Rendimento> rendimentos,
+                                    boolean soParaViagem) {
 
         static ItemFichaResponse de(ItemFichaTecnica item) {
             Insumo i = item.getInsumo();
             return new ItemFichaResponse(i.getId(), i.getNome(), i.getUnidade().getSigla(), item.getModo(),
                     item.getQuantidadeInformada(), item.getEmbalagem() != null ? item.getEmbalagem().getId() : null,
                     item.descricao(), item.getQuantidade().setScale(6, RoundingMode.HALF_UP),
-                    Dinheiro.centavos(item.custo()), calcularRendimentos(i, item.getQuantidade()));
+                    Dinheiro.centavos(item.custo()), calcularRendimentos(i, item.getQuantidade()), item.isSoParaViagem());
         }
     }
 

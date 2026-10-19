@@ -365,6 +365,8 @@ O histórico fica em **Consumo da equipe (30 dias)**. O custo aparece em Finance
 
 A tela **Cardápio** mostra, para cada produto, preço, custo, margem, CMV (classificado como saudável, atenção ou alto) e quantas unidades o estoque permite fazer.
 
+Na ficha técnica, marque **Só para viagem** nos itens de embalagem (caixa, sacola): eles saem do estoque na entrega e na retirada, e não saem quando o cliente come na mesa.
+
 1. Clique em **+ Novo produto** ou em **Editar**.
 2. Preencha **Nome**, **Categoria**, **Preço de venda** e, se quiser, **Descrição**.
 3. Em **Ficha técnica (por unidade vendida)**, adicione cada insumo com a quantidade e a unidade, como 300 g de batata, 12 iscas ou "7 porções por Saco 2 kg". Use **+ Insumo** para mais linhas.

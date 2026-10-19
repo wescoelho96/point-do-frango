@@ -74,7 +74,8 @@ public class Produto {
     }
 
     /** Linha da ficha como foi digitada; embalagem só no modo rendimento. */
-    public record Componente(Insumo insumo, ModoQuantidade modo, BigDecimal quantidade, EmbalagemCompra embalagem) {
+    public record Componente(Insumo insumo, ModoQuantidade modo, BigDecimal quantidade, EmbalagemCompra embalagem,
+                             boolean soParaViagem) {
     }
 
     /**
@@ -96,7 +97,7 @@ public class Produto {
                         fichaTecnica.add(novo);
                         return novo;
                     });
-            item.definir(c.modo(), c.quantidade(), c.embalagem());
+            item.definir(c.modo(), c.quantidade(), c.embalagem(), c.soParaViagem());
         }
     }
 
