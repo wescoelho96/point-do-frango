@@ -424,9 +424,11 @@ A aba **Vendas e potes** mostra, para o período escolhido (Hoje, 7 dias, 30 dia
 
 Quando as vendas não cobrem custos, contas e taxas, aparece um aviso de prejuízo.
 
-### Metas e gráficos
+### Resultado e metas
 
-A aba **Metas e gráficos** compara o dia de hoje com a média dos últimos 14, 30, 60 ou 90 dias. A média considera só os dias em que houve venda, para que dias fechados não baixem a meta.
+No topo da aba **Resultado e metas** fica a **Saúde do mês**: vendas menos taxas, custo do que foi vendido, cortesias, consumo da equipe, perdas da contagem e despesas (diárias, motoboy, manutenção e as contas fixas que ainda vencem). O resultado aparece como **Lucro do mês** ou **Prejuízo do mês**. Ao lado, **Vender no mês para pagar tudo** e **Falta vender** mostram quanto ainda é preciso vender, por dia, para cobrir as contas. Compras de mercadoria não entram como despesa: viram estoque e entram no custo quando o produto é vendido. Compras no crédito aparecem no mês da fatura.
+
+Abaixo, a mesma aba compara o dia de hoje com a média dos últimos 14, 30, 60 ou 90 dias. A média considera só os dias em que houve venda, para que dias fechados não baixem a meta.
 
 - **Vendido hoje**, **Pedidos hoje** e **Falta para a meta do dia**: quanto falta para igualar a média diária. Ao bater a meta, o indicador ganha o ✅.
 - **Metas de hoje por produto**: a barra é o que já saiu hoje e o traço é a média por dia de venda daquele produto.

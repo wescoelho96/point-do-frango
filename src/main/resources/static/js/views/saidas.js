@@ -12,7 +12,7 @@ const CLASSE_SITUACAO = { PAGA: 'badge-good', PARCIAL: 'badge-warn', PENDENTE: '
 export const abas = (atual) => html`
   <div class="segmented" style="margin-bottom:16px">
     <a class="${atual === 'vendas' ? 'on' : ''}" href="#financeiro">💰 Vendas e potes</a>
-    <a class="${atual === 'metas' ? 'on' : ''}" href="#financeiro?aba=metas">📈 Metas e gráficos</a>
+    <a class="${atual === 'metas' ? 'on' : ''}" href="#financeiro?aba=metas">📈 Resultado e metas</a>
     <a class="${atual === 'saidas' ? 'on' : ''}" href="#financeiro?aba=saidas">📤 Saídas do mês</a>
     <a class="${atual === 'fornecedores' ? 'on' : ''}" href="#financeiro?aba=fornecedores">🏪 Fornecedores</a>
     <a class="${atual === 'contador' ? 'on' : ''}" href="#financeiro?aba=contador">📑 Contador</a>

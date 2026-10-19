@@ -82,8 +82,13 @@ public final class PedidoDtos {
     }
 
     /** Sem taxa: ela vem do cadastro do bairro. */
+    /** motoboyJaPago: só na venda de dia anterior, quando o motoboy já recebeu fora do caixa. */
     public record EntregaRequest(@NotNull Long bairroId, @Size(max = 150) String referencia, Long entregadorId,
-                                 boolean gratis, boolean peloDono) {
+                                 boolean gratis, boolean peloDono, boolean motoboyJaPago) {
+
+        public EntregaRequest(Long bairroId, String referencia, Long entregadorId, boolean gratis, boolean peloDono) {
+            this(bairroId, referencia, entregadorId, gratis, peloDono, false);
+        }
 
         public EntregaRequest(Long bairroId, String referencia, Long entregadorId) {
             this(bairroId, referencia, entregadorId, false, false);

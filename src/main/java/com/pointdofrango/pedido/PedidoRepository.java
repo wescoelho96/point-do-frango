@@ -26,7 +26,7 @@ public interface PedidoRepository extends JpaRepository<Pedido, Long> {
 
     /** Entregas que o motoboy fez e ainda não recebeu (de qualquer dia). */
     @EntityGraph(attributePaths = {"itens", "comanda", "entregador"})
-    @Query("select p from Pedido p where p.entregador is not null and p.acertoEntregadorId is null "
+    @Query("select p from Pedido p where p.entregador is not null and p.acertoEntregadorId is null and p.motoboyPagoFora = false "
             + "and p.status <> com.pointdofrango.pedido.StatusPedido.CANCELADO order by p.criadoEm")
     List<Pedido> entregasSemAcerto();
 

@@ -115,6 +115,10 @@ public class Pedido {
     @Column(name = "acerto_entregador_id")
     private Long acertoEntregadorId;
 
+    /** Entrega de dia anterior: o motoboy já recebeu por fora do caixa. */
+    @Column(name = "motoboy_pago_fora", nullable = false)
+    private boolean motoboyPagoFora;
+
     /** Para quem / por que foi dado de graça (só na cortesia). */
     private String motivoCortesia;
 
@@ -296,7 +300,11 @@ public class Pedido {
     }
 
     public boolean acertadoComEntregador() {
-        return acertoEntregadorId != null;
+        return acertoEntregadorId != null || motoboyPagoFora;
+    }
+
+    void registrarMotoboyPagoFora() {
+        this.motoboyPagoFora = true;
     }
 
     void atribuirEntregador(Colaborador motoboy, boolean peloDono) {

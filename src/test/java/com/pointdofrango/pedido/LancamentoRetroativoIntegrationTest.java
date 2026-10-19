@@ -1,6 +1,9 @@
 package com.pointdofrango.pedido;
 
+import com.pointdofrango.caixa.CaixaService;
 import com.pointdofrango.consumo.ConsumoInternoService;
+import com.pointdofrango.entrega.Colaborador;
+import com.pointdofrango.entrega.EntregaCadastroService;
 import com.pointdofrango.estoque.EstoqueDtos.InsumoRequest;
 import com.pointdofrango.estoque.EstoqueService;
 import com.pointdofrango.estoque.Insumo;
@@ -8,6 +11,7 @@ import com.pointdofrango.estoque.UnidadeMedida;
 import com.pointdofrango.financeiro.FormaPagamento;
 import com.pointdofrango.painel.PainelVendasService;
 import com.pointdofrango.painel.PainelVendasService.ProdutoMeta;
+import com.pointdofrango.pedido.PedidoDtos.EntregaRequest;
 import com.pointdofrango.pedido.PedidoDtos.ItemRequest;
 import com.pointdofrango.pedido.PedidoDtos.NovoPedidoRequest;
 import com.pointdofrango.produto.CategoriaProduto;
@@ -45,6 +49,8 @@ class LancamentoRetroativoIntegrationTest {
     @Autowired ProdutoService produtos;
     @Autowired PainelVendasService painelVendas;
     @Autowired ConsumoInternoService consumo;
+    @Autowired EntregaCadastroService cadastros;
+    @Autowired CaixaService caixa;
 
     @Test
     @DisplayName("Venda de 3 dias atrás: fica naquele dia, já entregue, com o preço cobrado, e baixa o estoque mesmo negativo")
@@ -132,6 +138,29 @@ class LancamentoRetroativoIntegrationTest {
         consumo.registrar("Janta de ontem", Map.of(), Map.of(refri.getId(), bd("1")), "dono", true);
 
         assertThat(estoque.buscar(refri.getId()).getEstoqueAtual()).isEqualByComparingTo("-1");
+    }
+
+    @Test
+    @DisplayName("Entrega de ontem com motoboy já pago por fora não fica pendente no acerto; no dia isso é recusado")
+    void motoboyJaPago() {
+        Insumo lata = estoque.criar(new InsumoRequest("Lata entrega " + SEQ.incrementAndGet(), UnidadeMedida.UNIDADE,
+                bd("0"), bd("3"), bd("10")), "t");
+        Produto venda = produtos.criar(new ProdutoRequest("Lata entrega venda " + SEQ.get(), null, CategoriaProduto.BEBIDA, bd("6"),
+                List.of(new ItemFichaRequest(lata.getId(), bd("1")))));
+        var bairro = cadastros.criarBairro("Bairro retro " + SEQ.get(), bd("4"));
+        Colaborador motoboy = cadastros.criarColaborador("Motoboy retro " + SEQ.get(), Colaborador.Funcao.MOTOBOY, bd("50"));
+        LocalDateTime ontem = LocalDateTime.now(SP).minusDays(1).withHour(19).withMinute(0).withSecond(0).withNano(0);
+
+        pedidos.lancar(new NovoPedidoRequest(CanalVenda.WHATSAPP, FormaPagamento.CREDITO, "Bianca", null, "Rua Touro, 35", null,
+                List.of(new ItemRequest(venda.getId(), 1, null)), null,
+                new EntregaRequest(bairro.getId(), null, motoboy.getId(), false, false, true), true, null, false, null, ontem), "dono");
+
+        assertThat(caixa.pendenciasMotoboys()).filteredOn(x -> x.motoboy().getId().equals(motoboy.getId()))
+                .allSatisfy(x -> assertThat(x.entregas()).isEmpty());
+        assertThatThrownBy(() -> pedidos.lancar(new NovoPedidoRequest(CanalVenda.WHATSAPP, FormaPagamento.CREDITO, "Bianca",
+                "11999998888", "Rua Touro, 35", null, List.of(new ItemRequest(venda.getId(), 1)), null,
+                new EntregaRequest(bairro.getId(), null, motoboy.getId(), false, false, true), true, null, false, null), "dono"))
+                .isInstanceOf(RegraDeNegocioException.class).hasMessageContaining("Motoboy já pago");
     }
 
     private static NovoPedidoRequest retroativo(Produto produto, FormaPagamento forma, BigDecimal preco, LocalDateTime quando) {

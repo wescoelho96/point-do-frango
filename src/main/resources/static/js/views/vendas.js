@@ -1,10 +1,74 @@
 import { api } from '../api.js';
-import { aoClicar, html, moeda, numero, pct, renderizar } from '../ui.js';
+import { aoClicar, hojeISO, html, moeda, numero, pct, renderizar } from '../ui.js';
 import { barras, indicador } from '../graficos.js';
 import { ativarTooltips } from './potes.js';
 import { abas } from './saidas.js';
 
 const PERIODOS = [14, 30, 60, 90];
+/** Não são despesa do mês: compra de mercadoria vira estoque (entra no custo quando vende) e sangria/suprimento só mudam o dinheiro de lugar. */
+const FORA_DAS_DESPESAS = ['INSUMOS', 'SANGRIA', 'SUPRIMENTO', 'PRO_LABORE'];
+
+/**
+ * Resultado do mês: vendas menos taxas, custo do que saiu (fichas, cortesias, equipe, perdas da contagem) e despesas.
+ * Ponto de equilíbrio: quanto vender no mês para pagar tudo, pela margem que sobra de cada real vendido.
+ */
+export function saudeDoMes({ resumo, saidas, furo, hoje }) {
+  const n = (v) => Number(v ?? 0);
+  const vendas = n(resumo.faturamentoBruto);
+  const taxas = n(resumo.potes.taxaPagamento);
+  const custoVendido = n(resumo.potes.reposicaoEstoque);
+  const cortesias = n(resumo.cortesias?.custo);
+  const equipe = n(saidas.consumoInterno);
+  const perdas = furo.reduce((t, f) => t + n(f.valorPerdas) - n(f.valorSobras), 0);
+  const margem = vendas - taxas - custoVendido - cortesias - equipe - perdas;
+  const despesas = saidas.porCategoria.filter((c) => !FORA_DAS_DESPESAS.includes(c.categoria));
+  const pagas = despesas.reduce((t, c) => t + n(c.valor), 0);
+  const aPagar = saidas.contasFixas.reduce((t, c) => t + Math.max(0, n(c.valorMensal) - n(c.pago)), 0);
+  const resultado = margem - pagas - aPagar;
+  const proLabore = n(saidas.porCategoria.find((c) => c.categoria === 'PRO_LABORE')?.valor);
+  const compras = n(saidas.porCategoria.find((c) => c.categoria === 'INSUMOS')?.valor);
+
+  const percentual = vendas > 0 ? margem / vendas : 0;
+  const necessario = percentual > 0 ? (pagas + aPagar) / percentual : null;
+  const [ano, mes, dia] = hoje.split('-').map(Number);
+  const diasNoMes = new Date(ano, mes, 0).getDate();
+  const restantes = diasNoMes - dia + 1;
+  const falta = necessario == null ? null : Math.max(0, necessario - vendas);
+  const ticket = n(resumo.ticketMedio);
+  const linha = (rotulo, valor, dica = '', forte = false) => html`
+    <tr${forte ? html` style="font-weight:700"` : ''}><td>${rotulo}${dica ? html`<div class="muted" style="font-size:.78rem">${dica}</div>` : ''}</td>
+      <td class="num right">${moeda(valor)}</td></tr>`;
+
+  return html`
+    <div class="card grafico ${resultado < 0 ? 'alerta' : ''}">
+      <h2>Saúde do mês ${resultado < 0 ? '⚠️' : '✅'}</h2>
+      <p class="muted grafico-sub">De 1º/${String(mes).padStart(2, '0')} até hoje, com as contas fixas que ainda vencem no mês</p>
+      <div class="painel-grade" style="margin-top:0">
+        <table><tbody>
+          ${linha('Vendas', vendas, `${resumo.quantidadePedidos} pedidos · ticket médio ${moeda(ticket)}`)}
+          ${linha('(−) Taxas da maquininha e dos apps', -taxas)}
+          ${linha('(−) Custo do que foi vendido', -custoVendido, 'pela ficha técnica de cada produto')}
+          ${cortesias ? linha('(−) Cortesias e doações', -cortesias) : ''}
+          ${equipe ? linha('(−) Consumo da equipe e doações', -equipe) : ''}
+          ${perdas ? linha(perdas > 0 ? '(−) Perdas na contagem do estoque' : '(+) Sobras na contagem do estoque', -perdas,
+            'diferença entre o que as fichas baixaram e o que foi contado') : ''}
+          ${linha('= Sobra das vendas', margem, vendas ? `${pct(percentual * 100)} de cada real vendido` : '', true)}
+          ${despesas.map((c) => linha(`(−) ${c.rotulo}`, -n(c.valor)))}
+          ${aPagar ? linha('(−) Contas fixas que ainda vencem', -aPagar) : ''}
+          ${linha(resultado < 0 ? '= Prejuízo do mês' : '= Lucro do mês', resultado, proLabore ? `antes das suas retiradas (${moeda(proLabore)})` : '', true)}
+        </tbody></table>
+        <div class="stack">
+          ${indicador({ rotulo: 'Vender no mês para pagar tudo', valor: necessario == null ? '—' : moeda(necessario),
+            sub: necessario == null ? 'sem margem positiva ainda' : `já vendido ${moeda(vendas)}`, status: falta === 0 ? 'NORMAL' : null })}
+          ${indicador({ rotulo: 'Falta vender', valor: falta == null ? '—' : moeda(falta),
+            sub: falta ? `${moeda(falta / restantes)} por dia nos ${restantes} dia(s) que faltam${ticket ? ` · ≈ ${Math.ceil(falta / ticket)} pedidos` : ''}`
+              : 'contas do mês cobertas 🎉', status: falta ? 'ALERTA' : 'NORMAL' })}
+          ${indicador({ rotulo: 'Pago em mercadoria no mês', valor: moeda(compras),
+            sub: `custo do que foi vendido: ${moeda(custoVendido)} · compras no crédito entram no mês da fatura` })}
+        </div>
+      </div>
+    </div>`;
+}
 
 function textoMeta(feito, alvo, fmt) {
   return alvo > 0 ? `meta ${fmt(alvo)} · ${pct((feito / alvo) * 100)} da média` : 'sem histórico para a meta';
@@ -57,9 +121,16 @@ function porHora(horas) {
 export async function montar(container) {
   let dias = 30;
   let r = null;
+  let saude = null;
 
   async function carregar() {
-    r = await api.get(`/painel/vendas?dias=${dias}`);
+    const hoje = hojeISO();
+    const inicio = `${hoje.slice(0, 8)}01`;
+    const [vendas, resumo, saidas, furo] = await Promise.all([api.get(`/painel/vendas?dias=${dias}`),
+      api.get(`/painel/resumo?inicio=${inicio}&fim=${hoje}`), api.get(`/saidas/mes?mes=${hoje.slice(0, 7)}`),
+      api.get(`/insumos/furo?inicio=${inicio}&fim=${hoje}`)]);
+    r = vendas;
+    saude = { resumo, saidas, furo, hoje };
     desenhar();
   }
 
@@ -76,13 +147,14 @@ export async function montar(container) {
     renderizar(container, html`
       ${abas('metas')}
       <div class="page-head">
-        <div><h1>Vendas e metas</h1>
+        <div><h1>Resultado e metas</h1>
           <p>Hoje contra a média dos últimos ${r.dias} dias (${r.diasComVenda} dia(s) com venda; dias fechados não contam).</p></div>
         <div class="segmented">${PERIODOS.map((d) => html`
           <button data-acao="dias" data-v="${d}" class="${d === dias ? 'on' : ''}">${d} dias</button>`)}</div>
       </div>
 
       <div class="stack">
+        ${saudeDoMes(saude)}
         <div class="stat-row">
           ${indicador({ rotulo: 'Vendido hoje', valor: moeda(fatHoje), status: metaBatida ? 'NORMAL' : null,
             sub: textoMeta(fatHoje, fatMeta, moeda) })}

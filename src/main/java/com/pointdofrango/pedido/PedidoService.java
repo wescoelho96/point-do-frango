@@ -233,6 +233,12 @@ public class PedidoService {
             boolean gratis = req.entrega().gratis() || req.formaPagamento() == FormaPagamento.CORTESIA;
             pedido.definirEntrega(entrega.bairro().getNome(), entrega.bairro().getTaxaEntrega(), gratis,
                     entrega.motoboy(), req.entrega().peloDono());
+            if (req.entrega().motoboyJaPago()) {
+                if (!retroativo || entrega.motoboy() == null) {
+                    throw new RegraDeNegocioException("Motoboy já pago só vale para entrega de dia anterior feita por motoboy.");
+                }
+                pedido.registrarMotoboyPagoFora();
+            }
         }
         if (comanda == null) {
             pedido.registrarValorRecebido(req.valorRecebido());
