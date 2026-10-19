@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { aoClicar, hojeISO, html, moeda, numero, pct, renderizar } from '../ui.js';
+import { aoClicar, dataCurta, hojeISO, html, moeda, numero, pct, renderizar } from '../ui.js';
 import { barras, indicador } from '../graficos.js';
 import { ativarTooltips } from './potes.js';
 import { abas } from './saidas.js';
@@ -12,14 +12,19 @@ const FORA_DAS_DESPESAS = ['INSUMOS', 'SANGRIA', 'SUPRIMENTO', 'PRO_LABORE'];
  * Resultado do mês: vendas menos taxas, custo do que saiu (fichas, cortesias, equipe, perdas da contagem) e despesas.
  * Ponto de equilíbrio: quanto vender no mês para pagar tudo, pela margem que sobra de cada real vendido.
  */
-export function saudeDoMes({ resumo, saidas, furo, hoje }) {
+export function saudeDoMes({ resumo, saidas, furo, conferencia, hoje }) {
   const n = (v) => Number(v ?? 0);
   const vendas = n(resumo.faturamentoBruto);
   const taxas = n(resumo.potes.taxaPagamento);
   const custoVendido = n(resumo.potes.reposicaoEstoque);
   const cortesias = n(resumo.cortesias?.custo);
   const equipe = n(saidas.consumoInterno);
-  const perdas = furo.reduce((t, f) => t + n(f.valorPerdas) - n(f.valorSobras), 0);
+  // Loja nova: a primeira contagem corrige lançamentos antigos e infla as perdas; a conta pelo dinheiro
+  // (comprado - baixado - estoque) mede o que de fato sumiu desde a primeira compra.
+  const [anoHoje, mesHoje] = hoje.split('-').map(Number);
+  const mesPassado = mesHoje === 1 ? `${anoHoje - 1}-12-01` : `${anoHoje}-${String(mesHoje - 1).padStart(2, '0')}-01`;
+  const pelaConferencia = conferencia?.desde != null && conferencia.desde >= mesPassado;
+  const perdas = pelaConferencia ? n(conferencia.semExplicacao) : furo.reduce((t, f) => t + n(f.valorPerdas) - n(f.valorSobras), 0);
   const margem = vendas - taxas - custoVendido - cortesias - equipe - perdas;
   const despesas = saidas.porCategoria.filter((c) => !FORA_DAS_DESPESAS.includes(c.categoria));
   const pagas = despesas.reduce((t, c) => t + n(c.valor), 0);
@@ -50,8 +55,11 @@ export function saudeDoMes({ resumo, saidas, furo, hoje }) {
           ${linha('(−) Custo do que foi vendido', -custoVendido, 'pela ficha técnica de cada produto')}
           ${cortesias ? linha('(−) Cortesias e doações', -cortesias) : ''}
           ${equipe ? linha('(−) Consumo da equipe e doações', -equipe) : ''}
-          ${perdas ? linha(perdas > 0 ? '(−) Perdas na contagem do estoque' : '(+) Sobras na contagem do estoque', -perdas,
-            'diferença entre o que as fichas baixaram e o que foi contado') : ''}
+          ${perdas ? (pelaConferencia
+            ? linha(perdas > 0 ? '(−) Mercadoria que sumiu' : '(+) Estoque a mais do que as compras explicam', -perdas,
+              `desde ${dataCurta(conferencia.desde)}: comprado ${moeda(conferencia.compras)} − baixado ${moeda(conferencia.baixado)} − estoque ${moeda(conferencia.estoque)}`)
+            : linha(perdas > 0 ? '(−) Perdas na contagem do estoque' : '(+) Sobras na contagem do estoque', -perdas,
+              'diferença entre o que as fichas baixaram e o que foi contado')) : ''}
           ${linha('= Sobra das vendas', margem, vendas ? `${pct(percentual * 100)} de cada real vendido` : '', true)}
           ${despesas.map((c) => linha(`(−) ${c.rotulo}`, -n(c.valor)))}
           ${aPagar ? linha('(−) Contas fixas que ainda vencem', -aPagar) : ''}
@@ -126,11 +134,11 @@ export async function montar(container) {
   async function carregar() {
     const hoje = hojeISO();
     const inicio = `${hoje.slice(0, 8)}01`;
-    const [vendas, resumo, saidas, furo] = await Promise.all([api.get(`/painel/vendas?dias=${dias}`),
+    const [vendas, resumo, saidas, furo, conferencia] = await Promise.all([api.get(`/painel/vendas?dias=${dias}`),
       api.get(`/painel/resumo?inicio=${inicio}&fim=${hoje}`), api.get(`/saidas/mes?mes=${hoje.slice(0, 7)}`),
-      api.get(`/insumos/furo?inicio=${inicio}&fim=${hoje}`)]);
+      api.get(`/insumos/furo?inicio=${inicio}&fim=${hoje}`), api.get('/painel/conferencia')]);
     r = vendas;
-    saude = { resumo, saidas, furo, hoje };
+    saude = { resumo, saidas, furo, conferencia, hoje };
     desenhar();
   }
 

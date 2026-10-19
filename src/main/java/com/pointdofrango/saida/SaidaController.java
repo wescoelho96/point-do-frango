@@ -65,12 +65,15 @@ public class SaidaController {
     }
 
     private final SaidaService service;
+    private final DesfazerCompraService desfazerCompra;
     private final RelatorioSaidasService relatorio;
     private final Clock clock;
     private final ZoneId zona;
 
-    public SaidaController(SaidaService service, RelatorioSaidasService relatorio, Clock clock, ZoneId zona) {
+    public SaidaController(SaidaService service, DesfazerCompraService desfazerCompra, RelatorioSaidasService relatorio,
+                           Clock clock, ZoneId zona) {
         this.service = service;
+        this.desfazerCompra = desfazerCompra;
         this.relatorio = relatorio;
         this.clock = clock;
         this.zona = zona;
@@ -107,6 +110,12 @@ public class SaidaController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void remover(@PathVariable Long id, Authentication auth) {
         service.remover(id, auth.getName());
+    }
+
+    @DeleteMapping("/saidas/{id}/compra")
+    @Operation(summary = "Desfaz a compra: o que entrou no estoque sai (sem contar como perda) e o pagamento é removido")
+    public DesfazerCompraService.Desfeita desfazerCompra(@PathVariable Long id, Authentication auth) {
+        return desfazerCompra.desfazer(id, auth.getName());
     }
 
     @GetMapping("/fornecedores")

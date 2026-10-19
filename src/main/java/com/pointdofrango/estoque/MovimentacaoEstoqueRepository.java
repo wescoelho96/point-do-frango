@@ -15,6 +15,13 @@ public interface MovimentacaoEstoqueRepository extends JpaRepository<Movimentaca
 
     List<MovimentacaoEstoque> findTop100ByInsumoIdOrderByCriadoEmDescIdDesc(Long insumoId);
 
+    /** Valor do que saiu do estoque pelos tipos dados (negativo = saída), pelo custo médio de cada movimentação. */
+    @Query("select coalesce(sum(m.quantidade * m.custoUnitario), 0) from MovimentacaoEstoque m where m.tipo in :tipos")
+    BigDecimal valorPorTipos(Collection<TipoMovimentacao> tipos);
+
+    List<MovimentacaoEstoque> findByTipoAndInsumoNomeAndCriadoEmBetweenOrderByIdDesc(TipoMovimentacao tipo, String nome,
+                                                                                    Instant desde, Instant ate);
+
     List<MovimentacaoEstoque> findByPedidoIdAndTipo(Long pedidoId, TipoMovimentacao tipo);
 
     boolean existsByInsumoIdAndTipoIn(Long insumoId, Collection<TipoMovimentacao> tipos);

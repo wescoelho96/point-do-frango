@@ -22,14 +22,23 @@ public class PainelController {
 
     private final PainelService service;
     private final PainelVendasService vendas;
+    private final ConferenciaService conferencia;
     private final Clock clock;
     private final ZoneId zona;
 
-    public PainelController(PainelService service, PainelVendasService vendas, Clock clock, ZoneId zona) {
+    public PainelController(PainelService service, PainelVendasService vendas, ConferenciaService conferencia, Clock clock,
+                            ZoneId zona) {
         this.vendas = vendas;
+        this.conferencia = conferencia;
         this.service = service;
         this.clock = clock;
         this.zona = zona;
+    }
+
+    @GetMapping("/conferencia")
+    @Operation(summary = "Conferência pelo dinheiro desde a primeira compra: comprado, baixado, em estoque e o que sumiu")
+    public ConferenciaService.Conferencia conferencia() {
+        return conferencia.conferir();
     }
 
     @GetMapping("/vendas")

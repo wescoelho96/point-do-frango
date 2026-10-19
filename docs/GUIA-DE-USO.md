@@ -408,6 +408,8 @@ Para lançar a diária de um dia anterior, use **+ Diária** no quadro da equipe
 
 A tela mostra ainda o total por categoria, o que cada pessoa da equipe recebeu, as compras por fornecedor, o acompanhamento do limite de faturamento do regime (MEI ou ME, ajustável em **Alterar**), o histórico de seis meses e quem ficou com as taxas de entrega. Lançamentos feitos por fora podem ser removidos ali; os feitos no caixa só pela tela Caixa.
 
+**Compra lançada em dobro:** na lista do mês, clique em **Desfazer compra** na linha da compra de mercadoria. O que ela colocou no estoque sai (sem contar como perda) e o pagamento é removido com todas as parcelas. O **✕** remove só o pagamento.
+
 A aba **Fornecedores** cadastra mercados, distribuidoras e prestadores com **+ Fornecedor**.
 
 ### Financeiro e potes
@@ -426,7 +428,7 @@ Quando as vendas não cobrem custos, contas e taxas, aparece um aviso de prejuí
 
 ### Resultado e metas
 
-No topo da aba **Resultado e metas** fica a **Saúde do mês**: vendas menos taxas, custo do que foi vendido, cortesias, consumo da equipe, perdas da contagem e despesas (diárias, motoboy, manutenção e as contas fixas que ainda vencem). O resultado aparece como **Lucro do mês** ou **Prejuízo do mês**. Ao lado, **Vender no mês para pagar tudo** e **Falta vender** mostram quanto ainda é preciso vender, por dia, para cobrir as contas. Compras de mercadoria não entram como despesa: viram estoque e entram no custo quando o produto é vendido. Compras no crédito aparecem no mês da fatura.
+No topo da aba **Resultado e metas** fica a **Saúde do mês**: vendas menos taxas, custo do que foi vendido, cortesias, consumo da equipe, perdas da contagem e despesas (diárias, motoboy, manutenção e as contas fixas que ainda vencem). O resultado aparece como **Lucro do mês** ou **Prejuízo do mês**. Ao lado, **Vender no mês para pagar tudo** e **Falta vender** mostram quanto ainda é preciso vender, por dia, para cobrir as contas. Enquanto a loja é nova (primeira compra no mês passado ou neste), a perda é medida pelo dinheiro: tudo o que foi comprado menos o que as fichas baixaram e o que está no estoque. Compras de mercadoria não entram como despesa: viram estoque e entram no custo quando o produto é vendido. Compras no crédito aparecem no mês da fatura.
 
 Abaixo, a mesma aba compara o dia de hoje com a média dos últimos 14, 30, 60 ou 90 dias. A média considera só os dias em que houve venda, para que dias fechados não baixem a meta.
 

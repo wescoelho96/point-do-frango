@@ -201,6 +201,12 @@ public class EstoqueService {
         return valendo;
     }
 
+    /** Entradas de um insumo lançadas uma a uma (Entrada com pagamento), da mais recente para a mais antiga. */
+    @Transactional(readOnly = true)
+    public List<MovimentacaoEstoque> entradasAvulsas(String nomeInsumo, Instant desde, Instant ate) {
+        return movimentacoes.findByTipoAndInsumoNomeAndCriadoEmBetweenOrderByIdDesc(TipoMovimentacao.ENTRADA, nomeInsumo, desde, ate);
+    }
+
     /**
      * Desfaz a entrada de uma compra. O valor dela sai da diferença entre o valor em estoque depois e antes
      * (o custo médio só muda em entradas). Retorna o id do ajuste que registra o estorno no extrato.

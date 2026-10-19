@@ -137,7 +137,9 @@ export async function montar(container) {
               <td>${rotulo(l.forma)} <span class="muted" style="font-size:.78rem">${l.origem === 'CAIXA' ? '· gaveta' : '· por fora'}</span></td>
               <td class="num right bad">${moeda(l.valor)}</td>
               <td class="right">${l.origem === 'CONTA'
-                ? html`<button class="btn btn-sm" data-acao="remover" data-id="${l.id}" aria-label="Remover lançamento">✕</button>`
+                ? html`${l.categoria === 'INSUMOS' ? html`<button class="btn btn-sm" data-acao="desfazerCompra" data-id="${l.id}"
+                    title="Compra lançada em dobro: tira do estoque o que entrou e remove o pagamento">Desfazer compra</button> ` : ''}<button
+                    class="btn btn-sm" data-acao="remover" data-id="${l.id}" aria-label="Remover lançamento">✕</button>`
                 : html`<span class="muted" title="Lançado no caixa: remova pela tela Caixa" style="font-size:.78rem">caixa</span>`}</td>
             </tr>`)}</tbody></table></div>` : html`<p class="muted">Nada lançado${filtro ? ' nesta categoria' : ''} em ${nomeMes(r.mes)}.</p>`}
       </div>`;
@@ -325,6 +327,18 @@ export async function montar(container) {
         },
       });
     },
+    desfazerCompra: (el) => modal({
+      titulo: 'Desfazer compra',
+      corpo: html`<p class="text-2">Para compra lançada em dobro ou por engano: o que ela colocou no estoque sai (sem contar como perda)
+        e o pagamento é removido, com todas as parcelas.</p>`,
+      textoSalvar: 'Desfazer compra',
+      perigo: true,
+      aoSalvar: async () => {
+        const r = await api.del(`/saidas/${el.dataset.id}/compra`);
+        toast(`Compra desfeita: ${r.insumos.join(', ')}`);
+        await carregar();
+      },
+    }),
     remover: (el) => modal({
       titulo: 'Remover lançamento',
       corpo: html`<p class="text-2">O pagamento sai das saídas do mês. Se for parcela de uma compra no crédito, todas as parcelas dessa compra saem juntas.</p>`,

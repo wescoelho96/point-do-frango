@@ -4,6 +4,7 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
@@ -15,4 +16,8 @@ public interface MovimentoCaixaRepository extends JpaRepository<MovimentoCaixa, 
             + "and m.categoria <> com.pointdofrango.financeiro.CategoriaSaida.SANGRIA "
             + "and m.criadoEm >= :inicio and m.criadoEm < :fim order by m.criadoEm desc")
     List<MovimentoCaixa> gastosEntre(Instant inicio, Instant fim);
+
+    @Query("select coalesce(sum(m.valor), 0) from MovimentoCaixa m where m.tipo = com.pointdofrango.caixa.MovimentoCaixa.Tipo.SAIDA "
+            + "and m.categoria = com.pointdofrango.financeiro.CategoriaSaida.INSUMOS")
+    BigDecimal totalDeCompras();
 }
