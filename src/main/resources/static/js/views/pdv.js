@@ -30,6 +30,9 @@ export async function montar(container, params = {}) {
     diasGratis: [],
     promocoes: [],
     semPromocao: false,
+    // comanda de papel lançada depois (só o dono): data e hora da venda
+    realizadoEm: '',
+    motoboyJaPago: false,
     salvarCliente: true,
     ultimo: null,
     enviando: false,
@@ -149,6 +152,17 @@ export async function montar(container, params = {}) {
             Salvar cliente para os próximos pedidos
           </label>
         </div>` : ''}
+      ${sessao.admin() && estado.destino === 'DIRETA' ? html`
+        <details class="card" style="padding:8px 10px" ${estado.realizadoEm ? 'open' : ''}>
+          <summary style="cursor:pointer;font-size:.85rem;font-weight:600">📅 Venda de outro dia (comanda de papel)</summary>
+          <label class="field" style="margin-top:6px">Data e hora da venda
+            <input type="datetime-local" data-campo="realizado" value="${estado.realizadoEm}" style="max-width:240px"></label>
+          ${estado.realizadoEm && ehEntrega() && estado.entregadorId && estado.entregadorId !== 'DONO' ? html`
+            <label class="row" style="gap:6px;font-size:.85rem"><input type="checkbox" data-campo="motoboyPago" ${estado.motoboyJaPago ? 'checked' : ''}
+              style="width:auto"> O motoboy já recebeu esta entrega (pago por fora)</label>` : ''}
+          <p class="muted" style="margin:4px 0 0;font-size:.8rem">Até 31 dias atrás. Entra já entregue, sem cozinha e sem promoção,
+            e baixa o estoque mesmo que o sistema esteja sem saldo. Deixe em branco para venda de agora.</p>
+        </details>` : ''}
       <div>
         <div class="muted" style="font-size:.8rem;margin-bottom:4px">Pagamento</div>
         <div class="segmented">
@@ -313,8 +327,9 @@ export async function montar(container, params = {}) {
       toast('Informe o nome do cliente para pedidos fora do balcão.', 'erro');
       return;
     }
-    if (ehEntrega() && (!campos.clienteTelefone?.trim() || !campos.enderecoEntrega?.trim() || !estado.bairroId)) {
-      toast('Para entrega, informe telefone, endereço e bairro.', 'erro');
+    const outroDia = !naComanda && estado.realizadoEm;
+    if (ehEntrega() && ((!outroDia && !campos.clienteTelefone?.trim()) || !campos.enderecoEntrega?.trim() || !estado.bairroId)) {
+      toast(outroDia ? 'Para entrega, informe endereço e bairro.' : 'Para entrega, informe telefone, endereço e bairro.', 'erro');
       return;
     }
     if (cortesia() && !campos.motivoCortesia?.trim()) {
@@ -344,7 +359,10 @@ export async function montar(container, params = {}) {
           entrega: ehEntrega() ? {
             bairroId: estado.bairroId, referencia: campos.referencia || null, gratis: estado.gratis,
             entregadorId: estado.entregadorId === 'DONO' ? null : estado.entregadorId, peloDono: estado.entregadorId === 'DONO',
+            motoboyJaPago: Boolean(outroDia && estado.motoboyJaPago && estado.entregadorId && estado.entregadorId !== 'DONO'),
           } : null,
+          realizadoEm: outroDia ? `${estado.realizadoEm}:00` : null,
+          semPromocao: outroDia ? true : estado.semPromocao,
         });
       const pedido = await api.post('/pedidos', corpo);
       estado.ultimo = pedido;
@@ -354,7 +372,8 @@ export async function montar(container, params = {}) {
       estado.bairroId = null;
       estado.gratis = gratisHoje();
       estado.semPromocao = false;
-      toast(pedido.status === 'ENTREGUE'
+      toast(outroDia ? `Pedido #${pedido.id} lançado no dia ${new Date(pedido.criadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`
+        : pedido.status === 'ENTREGUE'
         ? `Pedido #${pedido.id} registrado: só bebida, sai direto do balcão${pedido.comanda ? ` (na conta de ${pedido.comanda})` : ''}`
         : `Pedido #${pedido.id} enviado para a cozinha${pedido.comanda ? ` (${pedido.comanda})` : ''}`);
       await carregar(); // atualiza "dá para fazer N" e o consumo da comanda
@@ -414,6 +433,8 @@ export async function montar(container, params = {}) {
     if (campo === 'gratis') { estado.gratis = ev.target.checked; redesenhar(); }
     if (campo === 'promo') { estado.semPromocao = !ev.target.checked; redesenhar(); }
     if (campo === 'salvar') estado.salvarCliente = ev.target.checked;
+    if (campo === 'realizado') { estado.realizadoEm = ev.target.value; redesenhar(); }
+    if (campo === 'motoboyPago') estado.motoboyJaPago = ev.target.checked;
     if (ev.target.name === 'clienteTelefone') buscarCliente(ev.target.value);
   };
   const aoDigitar = (ev) => { if (ev.target.name === 'valorRecebido') atualizarTroco(); };

@@ -102,6 +102,10 @@ Para entrega, telefone, endereço e bairro são obrigatórios. O resumo do pedid
 
 ![Cupom e via do motoboy](img/cupom.png)
 
+### Venda de outro dia (somente dono)
+
+Para lançar uma comanda de papel depois (internet fora, dia corrido), abra **📅 Venda de outro dia** no pedido, informe a data e a hora da venda e lance normalmente. O pedido entra já entregue, sem passar pela cozinha e sem promoção, no dia informado (até 31 dias atrás). Na entrega, o telefone é opcional; se um motoboy entregou e já recebeu, marque **O motoboy já recebeu esta entrega**. Lance antes as notas e cupons de compra do período, para o custo sair certo.
+
 ### Promoções e brindes
 
 Quando o pedido atende a uma promoção ativa no dia (por exemplo, "comprou um combo, ganha um refrigerante"), aparece o quadro **Promoção do dia: dar o brinde**, com o item e a quantidade. O brinde é incluído automaticamente com preço zero. Para não dar o brinde, desmarque a opção antes de lançar.
