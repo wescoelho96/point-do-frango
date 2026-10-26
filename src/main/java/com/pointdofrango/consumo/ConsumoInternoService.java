@@ -4,6 +4,7 @@ import com.pointdofrango.estoque.EstoqueService;
 import com.pointdofrango.estoque.Insumo;
 import com.pointdofrango.estoque.MovimentacaoEstoque;
 import com.pointdofrango.produto.ConsumoFicha;
+import com.pointdofrango.produto.MontagemDoConsumo;
 import com.pointdofrango.produto.ProdutoService;
 import com.pointdofrango.shared.RegraDeNegocioException;
 import org.slf4j.Logger;
@@ -19,7 +20,9 @@ import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 /**
  * Consumo da equipe, por produto (baixa pela ficha técnica) ou direto por insumo.
@@ -53,20 +56,19 @@ public class ConsumoInternoService {
         if (porProduto.isEmpty() && porInsumo.isEmpty()) {
             throw new RegraDeNegocioException("Informe pelo menos um produto ou insumo consumido.");
         }
-        Map<Long, BigDecimal> consumo = new TreeMap<>(porInsumo);
+        List<ConsumoFicha> linhas = List.of();
         if (!porProduto.isEmpty()) {
             produtos.buscarVarios(porProduto.keySet());
-            for (ConsumoFicha linha : produtos.consumoDosProdutos(porProduto.keySet())) {
-                if (linha.soParaViagem()) {
-                    continue; // a equipe come no prato
-                }
-                BigDecimal usado = linha.quantidade().multiply(BigDecimal.valueOf(porProduto.get(linha.produtoId())));
-                consumo.merge(linha.insumoId(), usado, BigDecimal::add);
-            }
+            linhas = produtos.consumoDosProdutos(porProduto.keySet());
         }
-        consumo.replaceAll((id, qtd) -> qtd.setScale(6, RoundingMode.HALF_UP));
+        Set<Long> ids = new TreeSet<>(porInsumo.keySet());
+        linhas.forEach(l -> ids.add(l.insumoId()));
+        Map<Long, Insumo> travados = estoque.travar(ids);
 
-        Map<Long, Insumo> travados = estoque.travarEConferir(consumo, !jaConsumido);
+        // A equipe come no prato: caixa e sacola não saem
+        Map<Long, BigDecimal> consumo = new TreeMap<>(MontagemDoConsumo.montar(linhas, porProduto, true, travados).porInsumo());
+        porInsumo.forEach((id, qtd) -> consumo.merge(id, qtd.setScale(6, RoundingMode.HALF_UP), BigDecimal::add));
+        estoque.conferir(travados, consumo, !jaConsumido);
         List<MovimentacaoEstoque> baixas = estoque.baixarConsumoInterno(travados, consumo, motivo.strip(), usuario, jaConsumido);
         log.info("Consumo interno por {}: {} insumo(s) ({})", usuario, baixas.size(), motivo);
         return baixas;

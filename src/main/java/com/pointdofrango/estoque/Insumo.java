@@ -63,6 +63,10 @@ public class Insumo {
     @Column(nullable = false)
     private boolean ativo = true;
 
+    /** Falso para o que não dá para contar a cada venda (óleo reaproveitado): baixa sem bloquear, mesmo negativo. */
+    @Column(nullable = false)
+    private boolean travaVenda = true;
+
     /** Como a cozinha conta o insumo, ex.: "isca", 12 por kg. */
     @Column(length = 30)
     private String unidadeUsoNome;
@@ -207,6 +211,22 @@ public class Insumo {
         return estoqueAtual.add(TOLERANCIA).compareTo(quantidade) >= 0;
     }
 
+    /** Quantas vezes cabe a quantidade no saldo; sem trava, não limita. */
+    public long vezesQueCabe(BigDecimal quantidade) {
+        if (!travaVenda) {
+            return Long.MAX_VALUE;
+        }
+        return Math.max(0, estoqueAtual.add(TOLERANCIA).divide(quantidade, 0, RoundingMode.FLOOR).longValue());
+    }
+
+    public void definirTravaVenda(boolean travaVenda) {
+        this.travaVenda = travaVenda;
+    }
+
+    public boolean isTravaVenda() {
+        return travaVenda;
+    }
+
     /** Quem chama já conferiu o saldo (EstoqueService.travarEConferir). */
     void baixar(BigDecimal quantidade) {
         baixar(quantidade, false);
@@ -218,7 +238,7 @@ public class Insumo {
      */
     void baixar(BigDecimal quantidade, boolean permitirNegativo) {
         positivo(quantidade);
-        if (!permitirNegativo && !possui(quantidade)) {
+        if (!permitirNegativo && travaVenda && !possui(quantidade)) {
             throw new RegraDeNegocioException("Estoque insuficiente de " + nome);
         }
         estoqueAtual = estoqueAtual.subtract(quantidade);

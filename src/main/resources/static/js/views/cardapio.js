@@ -103,13 +103,14 @@ export async function montar(container) {
                 <tr class="${p.ativo ? '' : 'inativo'}">
                   <td><strong>${p.nome}</strong>${p.ativo ? '' : html` <span class="badge">fora do cardápio</span>`}${p.vaiParaCozinha ? ''
                     : html` <span class="badge" title="Pedido só com este item não passa pela cozinha">🥤 sai do balcão</span>`}
-                    <div class="muted" style="font-size:.8rem">${p.fichaTecnica.map((f) => `${f.descricao} ${f.insumo}${f.soParaViagem ? ' (só viagem)' : ''}`).join(' · ')}</div></td>
+                    <div class="muted" style="font-size:.8rem">${p.fichaTecnica.map((f) => `${f.alternativaDeInsumoId ? 'ou ' : ''}${f.descricao} ${f.insumo}${f.soParaViagem && !f.alternativaDeInsumoId ? ' (só viagem)' : ''}`).join(' · ')}</div></td>
                   <td>${p.categoriaRotulo}</td>
                   <td class="num right">${moeda(p.precoVenda)}</td>
                   <td class="num right">${moeda(p.custoAtual)}</td>
                   <td class="num right ${Number(p.margemValor) < 0 ? 'bad' : ''}">${moeda(p.margemValor)} <span class="muted">${pct(p.margemPercentual)}</span></td>
                   <td><span class="badge ${classe}">${pct(p.cmvPercentual)} · ${texto}</span></td>
-                  <td class="num right">${p.unidadesDisponiveis}</td>
+                  <td class="num right">${p.unidadesDisponiveis >= 999 ? '—' : p.unidadesDisponiveis}
+                    ${p.unidadesDisponiveis === 0 && p.limitadoPor ? html`<div class="bad" style="font-size:.78rem">falta ${p.limitadoPor}</div>` : ''}</td>
                   <td class="right"><button class="btn btn-sm" data-acao="editar" data-id="${p.id}">Editar</button></td>
                 </tr>`;
             })}
@@ -159,6 +160,11 @@ export async function montar(container) {
         <label class="muted" style="grid-column:1/-1;font-size:.8rem;display:flex;gap:6px;align-items:center;margin:-2px 0 0">
           <input type="checkbox" name="soParaViagem" ${item?.soParaViagem ? 'checked' : ''} style="width:auto">
           Só para viagem (caixa, sacola: não sai quando o cliente come na mesa)</label>
+        <label class="muted" style="grid-column:1/-1;font-size:.8rem;display:flex;gap:6px;align-items:center;margin:-2px 0 0">
+          Usar no lugar de
+          <select name="alternativaDe" data-alternativa="${item?.alternativaDeInsumoId ?? ''}" style="width:auto;padding:2px 6px"
+            aria-label="Usar no lugar de"><option value="">— (sempre sai)</option></select>
+          <span>quando ele acabar (ex.: 2 caixas Assaí no lugar da 30x30)</span></label>
         <div class="muted" style="grid-column:1/-1;font-size:.8rem;margin-top:-2px" data-info></div>
       </div>`;
   }
@@ -190,13 +196,33 @@ export async function montar(container) {
         // produto novo: bebida já vem sem cozinha
         if (!p) form.categoria.addEventListener('change', () => { form.vaiParaCozinha.checked = form.categoria.value !== 'BEBIDA'; });
         const ficha = form.querySelector('[data-ficha]');
+        // "Usar no lugar de" lista os insumos das outras linhas (que não são alternativa de ninguém)
+        const opcoesAlternativa = () => {
+          const linhas = [...ficha.querySelectorAll('[data-linha]')];
+          // dataset: valor salvo, enquanto o select ainda não foi montado
+          const alternativaDe = (l) => { const s = l.querySelector('[name=alternativaDe]'); return s.value || s.dataset.alternativa; };
+          linhas.forEach((l) => {
+            const sel = l.querySelector('[name=alternativaDe]');
+            const atual = alternativaDe(l);
+            const proprio = l.querySelector('[name=insumoId]').value;
+            const outros = linhas.filter((o) => o !== l && !alternativaDe(o))
+              .map((o) => insumos.find((i) => i.id === Number(o.querySelector('[name=insumoId]').value)))
+              .filter((i) => i && String(i.id) !== proprio);
+            sel.innerHTML = String(html`<option value="">— (sempre sai)</option>${outros.map((i) => html`
+              <option value="${i.id}" ${String(i.id) === String(atual) ? 'selected' : ''}>${i.nome}</option>`)}`);
+            sel.dataset.alternativa = '';
+            l.querySelector('[name=soParaViagem]').closest('label').classList.toggle('hidden', Boolean(sel.value));
+          });
+        };
         const atualizar = () => {
           let custo = 0;
+          opcoesAlternativa();
           ficha.querySelectorAll('[data-linha]').forEach((l) => {
             const ins = insumos.find((i) => i.id === Number(l.querySelector('[name=insumoId]').value));
             const base = paraBase(ins, l.querySelector('[name=modo]').value, decimal(l.querySelector('[name=quantidade]').value));
             const c = Number(ins.custoUnitario) * base;
-            custo += c;
+            // a alternativa só sai quando a principal acaba: o custo mostrado é o da principal
+            if (!l.querySelector('[name=alternativaDe]').value) custo += c;
             const rende = ins.embalagens.map((e) => `1 ${e.nome} rende ${numero(e.conteudo / base, 1)}`);
             l.querySelector('[data-info]').textContent = base
               ? [`= ${numero(base, 4)} ${ins.sigla}`, moeda(c), ...rende].join(' · ') : '';
@@ -237,6 +263,7 @@ export async function montar(container) {
             embalagemId: embalagemId ? Number(embalagemId) : null,
             quantidade: decimal(l.querySelector('[name=quantidade]').value),
             soParaViagem: l.querySelector('[name=soParaViagem]').checked,
+            alternativaDeInsumoId: Number(l.querySelector('[name=alternativaDe]').value) || null,
           };
         }).filter((f) => f.quantidade);
         const corpo = {

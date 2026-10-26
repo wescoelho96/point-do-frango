@@ -34,7 +34,16 @@ public final class EstoqueDtos {
             List<@Valid EmbalagemRequest> embalagens,
             @Size(max = 40) String grupo,
             @Size(max = 50) String marca,
-            @Size(max = 40) String local) {
+            @Size(max = 40) String local,
+            /* nulo = mantém (novo: trava). Falso para óleo reaproveitado: vende mesmo sem saldo no sistema */
+            Boolean travaVenda) {
+
+        public InsumoRequest(String nome, UnidadeMedida unidade, BigDecimal estoqueMinimo, BigDecimal custoUnitario,
+                             BigDecimal estoqueInicial, String unidadeUsoNome, BigDecimal unidadeUsoPorUnidade,
+                             List<EmbalagemRequest> embalagens, String grupo, String marca, String local) {
+            this(nome, unidade, estoqueMinimo, custoUnitario, estoqueInicial, unidadeUsoNome, unidadeUsoPorUnidade,
+                    embalagens, grupo, marca, local, null);
+        }
 
         /** Cadastro simples: sem unidade de uso e sem embalagens. */
         public InsumoRequest(String nome, UnidadeMedida unidade, BigDecimal estoqueMinimo, BigDecimal custoUnitario,
@@ -191,20 +200,22 @@ public final class EstoqueDtos {
                                  BigDecimal estoqueAtual, BigDecimal estoqueMinimo, BigDecimal custoUnitario,
                                  BigDecimal valorEmEstoque, boolean abaixoDoMinimo, boolean ativo,
                                  String unidadeUsoNome, BigDecimal unidadeUsoPorUnidade,
-                                 List<EmbalagemResponse> embalagens, String grupo, String marca, String local) {
+                                 List<EmbalagemResponse> embalagens, String grupo, String marca, String local,
+                                 boolean travaVenda) {
 
         public static InsumoResponse de(Insumo i) {
             return new InsumoResponse(i.getId(), i.getNome(), i.getUnidade(), i.getUnidade().getSigla(),
                     i.getUnidade().getSubunidade(), i.getEstoqueAtual(), i.getEstoqueMinimo(), i.getCustoUnitario(),
                     Dinheiro.centavos(i.getEstoqueAtual().multiply(i.getCustoUnitario())),
                     i.abaixoDoMinimo(), i.isAtivo(), i.getUnidadeUsoNome(), i.getUnidadeUsoPorUnidade(),
-                    i.getEmbalagens().stream().map(EmbalagemResponse::de).toList(), i.getGrupo(), i.getMarca(), i.getLocal());
+                    i.getEmbalagens().stream().map(EmbalagemResponse::de).toList(), i.getGrupo(), i.getMarca(), i.getLocal(),
+                    i.isTravaVenda());
         }
 
         /** O atendente confere o saldo, mas não vê quanto a loja paga pelos insumos. */
         public InsumoResponse semCustos() {
             return new InsumoResponse(id, nome, unidade, sigla, subunidade, estoqueAtual, estoqueMinimo, null, null,
-                    abaixoDoMinimo, ativo, unidadeUsoNome, unidadeUsoPorUnidade, embalagens, grupo, marca, local);
+                    abaixoDoMinimo, ativo, unidadeUsoNome, unidadeUsoPorUnidade, embalagens, grupo, marca, local, travaVenda);
         }
     }
 

@@ -58,6 +58,10 @@ public class ItemFichaTecnica {
     @Column(name = "so_para_viagem", nullable = false)
     private boolean soParaViagem;
 
+    /** Insumo da linha que esta substitui quando acaba (ex.: 2 caixas Assaí no lugar da caixa 30x30). */
+    @Column(name = "alternativa_de_insumo_id")
+    private Long alternativaDe;
+
     protected ItemFichaTecnica() {
     }
 
@@ -66,8 +70,10 @@ public class ItemFichaTecnica {
         this.insumo = insumo;
     }
 
-    void definir(ModoQuantidade modo, BigDecimal informada, EmbalagemCompra embalagem, boolean soParaViagem) {
+    void definir(ModoQuantidade modo, BigDecimal informada, EmbalagemCompra embalagem, boolean soParaViagem,
+                 Long alternativaDe) {
         this.soParaViagem = soParaViagem;
+        this.alternativaDe = alternativaDe;
         this.modo = modo;
         this.quantidadeInformada = informada;
         this.embalagem = modo == ModoQuantidade.RENDIMENTO_EMBALAGEM ? embalagem : null;
@@ -127,6 +133,14 @@ public class ItemFichaTecnica {
 
     public boolean isSoParaViagem() {
         return soParaViagem;
+    }
+
+    public Long getAlternativaDe() {
+        return alternativaDe;
+    }
+
+    public boolean isAlternativa() {
+        return alternativaDe != null;
     }
 
     public BigDecimal getQuantidade() {

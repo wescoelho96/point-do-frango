@@ -303,6 +303,9 @@ export async function montar(container, params = {}) {
         ${novo ? html`<label class="field"><span>Estoque inicial (<span data-sigla>${sigla}</span>)</span><input name="estoqueInicial" inputmode="decimal" value="0"></label>`
           : html`<label class="field"><span>Em estoque agora (<span data-sigla>${sigla}</span>)</span>
               <input name="saldoAtual" inputmode="decimal" value="${numero(i.estoqueAtual)}" title="Mudou? Fica registrado como contagem no extrato"></label>`}
+        <label class="row" style="grid-column:1/-1;gap:6px;font-size:.9rem"><input type="checkbox" name="semTrava" ${i && !i.travaVenda ? 'checked' : ''} style="width:auto">
+          Não bloquear a venda quando o saldo acabar (óleo reaproveitado, item que você não conta a cada venda).
+          Continua saindo do estoque e entrando no custo; se ficar negativo, aparece para lançar a compra ou a contagem.</label>
       </div>
 
       ${secaoVenda(novo ? null : i)}
@@ -392,6 +395,7 @@ export async function montar(container, params = {}) {
     unidadeUsoNome: d.unidadeUsoNome?.trim() || null,
     unidadeUsoPorUnidade: d.unidadeUsoNome?.trim() ? decimal(d.unidadeUsoPorUnidade) : null,
     grupo: d.grupo?.trim() || null, marca: d.marca?.trim() || null, local: d.local?.trim() || null,
+    travaVenda: d.semTrava !== 'on',
     embalagens: [...form.querySelectorAll('[data-embalagem]')]
       .map((l) => ({
         id: l.querySelector('[name=embId]').value ? Number(l.querySelector('[name=embId]').value) : null,

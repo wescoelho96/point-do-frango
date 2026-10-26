@@ -164,7 +164,8 @@ public class ProdutoService {
             }
             ModoQuantidade modo = item.modo() != null ? item.modo() : ModoQuantidade.UNIDADE_BASE;
             EmbalagemCompra embalagem = item.embalagemId() != null ? insumo.embalagem(item.embalagemId()) : null;
-            return new Produto.Componente(insumo, modo, item.quantidade(), embalagem, item.soParaViagem());
+            return new Produto.Componente(insumo, modo, item.quantidade(), embalagem, item.soParaViagem(),
+                    item.alternativaDeInsumoId());
         }).toList();
     }
 }

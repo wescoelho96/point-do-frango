@@ -214,11 +214,15 @@ export async function montar(container, params = {}) {
         ${lista.map((p) => {
           const noCarrinho = estado.itens.get(p.id) || 0;
           const restante = p.unidadesDisponiveis - noCarrinho;
+          // 999 = só insumos sem trava (óleo): não há limite para mostrar
+          const aviso = restante <= 0 ? (p.limitadoPor ? `Falta ${p.limitadoPor}` : 'Sem estoque')
+            : p.unidadesDisponiveis >= 999 ? '' : `dá para fazer ${restante}`;
           return html`
-            <button class="produto ${noCarrinho ? 'no-carrinho' : ''}" data-acao="add" data-id="${p.id}" ${restante <= 0 ? 'disabled' : ''}>
+            <button class="produto ${noCarrinho ? 'no-carrinho' : ''}" data-acao="add" data-id="${p.id}" ${restante <= 0 ? 'disabled' : ''}
+              ${restante <= 0 && p.limitadoPor ? html`title="Lance a compra ou a contagem de ${p.limitadoPor}"` : ''}>
               ${noCarrinho ? html`<span class="produto-qtd">${noCarrinho}</span>` : ''}
               <strong>${p.nome}</strong>
-              <small>${restante <= 0 ? 'Sem estoque' : `dá para fazer ${restante}`}</small>
+              <small>${aviso}</small>
               <span class="preco">${moeda(p.precoVenda)}</span>
             </button>`;
         })}

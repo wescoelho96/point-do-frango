@@ -15,6 +15,7 @@ import com.pointdofrango.financeiro.FormaPagamento;
 import com.pointdofrango.pedido.PedidoDtos.NovoPedidoRequest;
 import com.pointdofrango.pedido.PedidoDtos.PedidoPlataformaRequest;
 import com.pointdofrango.produto.ConsumoFicha;
+import com.pointdofrango.produto.MontagemDoConsumo;
 import com.pointdofrango.produto.Produto;
 import com.pointdofrango.produto.ProdutoService;
 import com.pointdofrango.produto.PromocaoService;
@@ -29,8 +30,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.util.ArrayList;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -42,7 +41,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 import java.util.function.Function;
 
 /**
@@ -169,25 +167,14 @@ public class PedidoService {
 
         Map<Long, Produto> produtos = produtoService.buscarVarios(saindo.keySet());
 
-        // Consumo por insumo inclui os brindes, que também saem do estoque
-        Map<Long, BigDecimal> consumoTotal = new TreeMap<>();
-        Map<Long, List<ConsumoFicha>> fichaPorProduto = new LinkedHashMap<>();
-        boolean naMesa = req.canal() == CanalVenda.MESA || req.comandaId() != null;
-        for (ConsumoFicha linha : produtoService.consumoDosProdutos(saindo.keySet())) {
-            if (naMesa && linha.soParaViagem()) {
-                continue; // na mesa vai no prato: a caixa não sai
-            }
-            fichaPorProduto.computeIfAbsent(linha.produtoId(), k -> new ArrayList<>()).add(linha);
-            BigDecimal usado = linha.quantidade().multiply(BigDecimal.valueOf(saindo.get(linha.produtoId())));
-            consumoTotal.merge(linha.insumoId(), usado, BigDecimal::add);
-        }
-
-        // Ficha tem 10 casas e o estoque 6. Arredondar só o total evita acumular erro
-        // (12 iscas de 0,0833333333 kg dão exatamente 1 kg).
-        consumoTotal.replaceAll((insumoId, qtd) -> qtd.setScale(6, RoundingMode.HALF_UP));
-
-        // Trava todos os insumos antes de baixar qualquer um
-        Map<Long, Insumo> insumos = estoqueService.travarEConferir(consumoTotal, !jaSaiu);
+        // Consumo por insumo inclui os brindes, que também saem do estoque.
+        // Trava todos os insumos (alternativas inclusive) antes de escolher e baixar qualquer um.
+        boolean naMesa = req.canal() == CanalVenda.MESA || req.comandaId() != null; // na mesa a caixa não sai
+        List<ConsumoFicha> linhas = produtoService.consumoDosProdutos(saindo.keySet());
+        Map<Long, Insumo> insumos = estoqueService.travar(linhas.stream().map(ConsumoFicha::insumoId).distinct().toList());
+        MontagemDoConsumo.Resultado consumo = MontagemDoConsumo.montar(linhas, saindo, naMesa, insumos);
+        Map<Long, BigDecimal> consumoTotal = consumo.porInsumo();
+        estoqueService.conferir(insumos, consumoTotal, !jaSaiu);
 
         // Custo dos itens congelado com o custo médio lido sob a trava
         Instant agora = retroativo ? realizadoEm : Instant.now(clock);
@@ -195,9 +182,7 @@ public class PedidoService {
         Pedido pedido = new Pedido(req.canal(), req.formaPagamento(),
                 new Pedido.DadosCliente(limpar(req.clienteNome()), telefone, endereco, limpar(req.observacao())),
                 usuario, agora);
-        Function<Long, BigDecimal> custoDe = produtoId -> fichaPorProduto.getOrDefault(produtoId, List.of())
-                .stream().map(l -> l.quantidade().multiply(insumos.get(l.insumoId()).getCustoUnitario()))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        Function<Long, BigDecimal> custoDe = produtoId -> consumo.custoUnitario(produtoId, saindo.get(produtoId), insumos);
         quantidades.forEach((produtoId, qtd) -> {
             if (retroativo) {
                 pedido.adicionarItem(produtos.get(produtoId), qtd, custoDe.apply(produtoId), precoCobrado.get(produtoId));

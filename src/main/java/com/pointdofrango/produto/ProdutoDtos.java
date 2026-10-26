@@ -26,7 +26,14 @@ public final class ProdutoDtos {
             @NotNull @DecimalMin(value = "0", inclusive = false) BigDecimal quantidade,
             Long embalagemId,
             /* caixa, sacola: só sai em entrega e retirada */
-            boolean soParaViagem) {
+            boolean soParaViagem,
+            /* insumo de outra linha que esta substitui quando acaba (2 caixas Assaí no lugar da 30x30) */
+            Long alternativaDeInsumoId) {
+
+        public ItemFichaRequest(Long insumoId, ModoQuantidade modo, BigDecimal quantidade, Long embalagemId,
+                                boolean soParaViagem) {
+            this(insumoId, modo, quantidade, embalagemId, soParaViagem, null);
+        }
 
         public ItemFichaRequest(Long insumoId, ModoQuantidade modo, BigDecimal quantidade, Long embalagemId) {
             this(insumoId, modo, quantidade, embalagemId, false);
@@ -63,14 +70,15 @@ public final class ProdutoDtos {
     public record ItemFichaResponse(Long insumoId, String insumo, String sigla, ModoQuantidade modo,
                                     BigDecimal quantidadeInformada, Long embalagemId, String descricao,
                                     BigDecimal quantidade, BigDecimal custo, List<Rendimento> rendimentos,
-                                    boolean soParaViagem) {
+                                    boolean soParaViagem, Long alternativaDeInsumoId) {
 
         static ItemFichaResponse de(ItemFichaTecnica item) {
             Insumo i = item.getInsumo();
             return new ItemFichaResponse(i.getId(), i.getNome(), i.getUnidade().getSigla(), item.getModo(),
                     item.getQuantidadeInformada(), item.getEmbalagem() != null ? item.getEmbalagem().getId() : null,
                     item.descricao(), item.getQuantidade().setScale(6, RoundingMode.HALF_UP),
-                    Dinheiro.centavos(item.custo()), calcularRendimentos(i, item.getQuantidade()), item.isSoParaViagem());
+                    Dinheiro.centavos(item.custo()), calcularRendimentos(i, item.getQuantidade()), item.isSoParaViagem(),
+                    item.getAlternativaDe());
         }
     }
 
@@ -101,28 +109,32 @@ public final class ProdutoDtos {
         }
     }
 
-    /** margemPercentual é a margem de contribuição (100 - cmvPercentual). */
+    /**
+     * margemPercentual é a margem de contribuição (100 - cmvPercentual).
+     * limitadoPor: insumo que segura o "dá para fazer" (o que falta quando é zero).
+     */
     public record ProdutoResponse(Long id, String nome, String descricao, CategoriaProduto categoria,
                                   String categoriaRotulo, BigDecimal precoVenda, boolean ativo,
                                   BigDecimal custoAtual, BigDecimal margemValor, BigDecimal margemPercentual,
-                                  BigDecimal cmvPercentual, int unidadesDisponiveis, List<ItemFichaResponse> fichaTecnica,
-                                  boolean vaiParaCozinha) {
+                                  BigDecimal cmvPercentual, int unidadesDisponiveis, String limitadoPor,
+                                  List<ItemFichaResponse> fichaTecnica, boolean vaiParaCozinha) {
 
         public static ProdutoResponse de(Produto p) {
             BigDecimal custo = Dinheiro.centavos(p.custoAtual());
             BigDecimal margem = p.getPrecoVenda().subtract(custo);
             BigDecimal cmvPct = custo.multiply(new BigDecimal("100")).divide(p.getPrecoVenda(), 1, RoundingMode.HALF_UP);
             BigDecimal margemPct = new BigDecimal("100").subtract(cmvPct);
+            Produto.Disponibilidade disp = p.disponibilidade();
             return new ProdutoResponse(p.getId(), p.getNome(), p.getDescricao(), p.getCategoria(),
                     p.getCategoria().getRotulo(), p.getPrecoVenda(), p.isAtivo(), custo, margem, margemPct, cmvPct,
-                    p.unidadesDisponiveis(), p.getFichaTecnica().stream().map(ItemFichaResponse::de).toList(),
+                    disp.unidades(), disp.limitadoPor(), p.getFichaTecnica().stream().map(ItemFichaResponse::de).toList(),
                     p.isVaiParaCozinha());
         }
 
         /** Para o atendente: preço e disponibilidade, sem custo nem margem. */
         public ProdutoResponse semCustos() {
             return new ProdutoResponse(id, nome, descricao, categoria, categoriaRotulo, precoVenda, ativo, null, null,
-                    null, null, unidadesDisponiveis, List.of(), vaiParaCozinha);
+                    null, null, unidadesDisponiveis, limitadoPor, List.of(), vaiParaCozinha);
         }
     }
 }

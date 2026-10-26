@@ -18,10 +18,12 @@ import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /** Item do cardápio. O custo não é digitado: vem da ficha técnica e do custo médio dos insumos. */
 @Entity
@@ -75,8 +77,20 @@ public class Produto {
 
     /** Linha da ficha como foi digitada; embalagem só no modo rendimento. */
     public record Componente(Insumo insumo, ModoQuantidade modo, BigDecimal quantidade, EmbalagemCompra embalagem,
-                             boolean soParaViagem) {
+                             boolean soParaViagem, Long alternativaDe) {
+
+        public Componente(Insumo insumo, ModoQuantidade modo, BigDecimal quantidade, EmbalagemCompra embalagem,
+                          boolean soParaViagem) {
+            this(insumo, modo, quantidade, embalagem, soParaViagem, null);
+        }
     }
+
+    /** Quantos dá para fazer e, quando é zero ou pouco, qual insumo segura. */
+    public record Disponibilidade(int unidades, String limitadoPor) {
+    }
+
+    /** Produto que só usa insumos sem trava (ou nenhum) não tem limite de estoque. */
+    public static final int SEM_LIMITE = 999;
 
     /**
      * Atualiza no lugar em vez de limpar e recriar: o Hibernate faz os INSERTs antes dos DELETEs
@@ -85,6 +99,14 @@ public class Produto {
     public void definirFichaTecnica(List<Componente> componentes) {
         if (componentes.isEmpty()) {
             throw new RegraDeNegocioException("A ficha técnica precisa de pelo menos um insumo (é dela que sai o custo).");
+        }
+        Map<Long, Componente> principais = componentes.stream().filter(c -> c.alternativaDe() == null)
+                .collect(Collectors.toMap(c -> c.insumo().getId(), c -> c));
+        for (Componente c : componentes) {
+            if (c.alternativaDe() != null && !principais.containsKey(c.alternativaDe())) {
+                throw new RegraDeNegocioException(c.insumo().getNome()
+                        + " é alternativa de um insumo que não está na ficha (ou que já é alternativa de outro).");
+            }
         }
         fichaTecnica.removeIf(item -> componentes.stream()
                 .noneMatch(c -> c.insumo().getId().equals(item.getInsumo().getId())));
@@ -97,22 +119,50 @@ public class Produto {
                         fichaTecnica.add(novo);
                         return novo;
                     });
-            item.definir(c.modo(), c.quantidade(), c.embalagem(), c.soParaViagem());
+            // A alternativa sai nas mesmas situações da linha que substitui
+            boolean soParaViagem = c.alternativaDe() != null ? principais.get(c.alternativaDe()).soParaViagem() : c.soParaViagem();
+            item.definir(c.modo(), c.quantidade(), c.embalagem(), soParaViagem, c.alternativaDe());
         }
     }
 
-    /** CMV unitário sem arredondar; arredonda só na resposta. */
+    /**
+     * CMV unitário sem arredondar; arredonda só na resposta. Linha com alternativas entra pela
+     * opção que a próxima venda usaria (a primeira com saldo).
+     */
     public BigDecimal custoAtual() {
-        return fichaTecnica.stream().map(ItemFichaTecnica::custo).reduce(BigDecimal.ZERO, BigDecimal::add);
+        return opcoesPorLinha().stream()
+                .map(opcoes -> opcoes.stream().filter(o -> o.getInsumo().vezesQueCabe(o.getQuantidade()) > 0)
+                        .findFirst().orElse(opcoes.get(0)).custo())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    /** Limitado pelo insumo mais escasso. */
     public int unidadesDisponiveis() {
-        return fichaTecnica.stream()
-                .mapToInt(item -> item.getInsumo().getEstoqueAtual().add(Insumo.TOLERANCIA)
-                        .divide(item.getQuantidade(), 0, RoundingMode.FLOOR).intValue())
-                .min()
-                .orElse(0);
+        return disponibilidade().unidades();
+    }
+
+    /** Limitado pelo insumo mais escasso; as alternativas de uma linha somam (dá para misturar caixas). */
+    public Disponibilidade disponibilidade() {
+        long menor = SEM_LIMITE;
+        String limitadoPor = null;
+        for (List<ItemFichaTecnica> opcoes : opcoesPorLinha()) {
+            long cabe = 0;
+            for (ItemFichaTecnica o : opcoes) {
+                cabe = Math.min(SEM_LIMITE, cabe + Math.min(SEM_LIMITE, o.getInsumo().vezesQueCabe(o.getQuantidade())));
+            }
+            if (cabe < menor) {
+                menor = cabe;
+                limitadoPor = opcoes.stream().map(o -> o.getInsumo().getNome()).collect(Collectors.joining(" ou "));
+            }
+        }
+        return new Disponibilidade((int) menor, limitadoPor);
+    }
+
+    /** Cada linha normal com as alternativas dela, na ordem da ficha. */
+    private List<List<ItemFichaTecnica>> opcoesPorLinha() {
+        return fichaTecnica.stream().filter(i -> !i.isAlternativa())
+                .map(principal -> Stream.concat(Stream.of(principal), fichaTecnica.stream()
+                        .filter(a -> principal.getInsumo().getId().equals(a.getAlternativaDe()))).toList())
+                .toList();
     }
 
     public void definirPreparo(boolean vaiParaCozinha) {

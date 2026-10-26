@@ -69,6 +69,9 @@ public class EstoqueService {
         novo.definirEmbalagens(dadosEmbalagens(req));
         novo.classificar(req.grupo(), req.marca());
         novo.guardarEm(req.local());
+        if (req.travaVenda() != null) {
+            novo.definirTravaVenda(req.travaVenda());
+        }
         Insumo insumo = insumos.save(novo);
         BigDecimal inicial = req.estoqueInicial();
         if (inicial != null && inicial.signum() > 0) {
@@ -85,6 +88,9 @@ public class EstoqueService {
         insumo.definirUnidadeUso(req.unidadeUsoNome(), req.unidadeUsoPorUnidade());
         insumo.classificar(req.grupo(), req.marca());
         insumo.guardarEm(req.local());
+        if (req.travaVenda() != null) {
+            insumo.definirTravaVenda(req.travaVenda());
+        }
         Set<Long> removidas = insumo.definirEmbalagens(dadosEmbalagens(req));
         // Produtos recalcula as fichas na mesma transação: ficha inválida desfaz a alteração.
         eventos.publishEvent(new InsumoConversaoAlterada(insumo.getId(), removidas));
@@ -342,16 +348,26 @@ public class EstoqueService {
 
     /** exigirSaldo false: lançamento retroativo, o que foi vendido já saiu do estoque de verdade. */
     public Map<Long, Insumo> travarEConferir(Map<Long, BigDecimal> consumo, boolean exigirSaldo) {
-        Map<Long, Insumo> travados = insumos.travarPorIds(consumo.keySet()).stream()
-                .collect(Collectors.toMap(Insumo::getId, Function.identity()));
+        Map<Long, Insumo> travados = travar(consumo.keySet());
+        conferir(travados, consumo, exigirSaldo);
+        return travados;
+    }
 
+    /** Trava sem conferir: quem escolhe entre alternativas da ficha precisa ler o saldo já travado. */
+    @Transactional
+    public Map<Long, Insumo> travar(Collection<Long> ids) {
+        return insumos.travarPorIds(ids).stream().collect(Collectors.toMap(Insumo::getId, Function.identity()));
+    }
+
+    /** Insumo sem trava de venda (óleo) nunca falta. */
+    public void conferir(Map<Long, Insumo> travados, Map<Long, BigDecimal> consumo, boolean exigirSaldo) {
         List<EstoqueInsuficienteException.Falta> faltas = new ArrayList<>();
         consumo.forEach((insumoId, necessario) -> {
             Insumo insumo = travados.get(insumoId);
             if (insumo == null) {
                 throw new RecursoNaoEncontradoException("Insumo", insumoId);
             }
-            if (exigirSaldo && !insumo.possui(necessario)) {
+            if (exigirSaldo && insumo.isTravaVenda() && !insumo.possui(necessario)) {
                 faltas.add(new EstoqueInsuficienteException.Falta(insumo.getNome(), necessario,
                         insumo.getEstoqueAtual(), insumo.getUnidade().getSigla()));
             }
@@ -359,7 +375,6 @@ public class EstoqueService {
         if (!faltas.isEmpty()) {
             throw new EstoqueInsuficienteException(faltas);
         }
-        return travados;
     }
 
     /** Baixa o consumo já conferido por {@link #travarEConferir} e registra no extrato. */
