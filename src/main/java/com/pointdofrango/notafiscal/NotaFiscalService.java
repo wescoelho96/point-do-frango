@@ -123,7 +123,7 @@ public class NotaFiscalService {
 
     @Transactional
     public Resultado importar(String xml, String enderecoQrCode, List<Ligacao> ligacoes, Pagamento pagamento, String usuario) {
-        // Relê no servidor (XML ou SEFAZ): valores e quantidades não vêm do navegador.
+        // Relê no servidor (XML ou a leitura da SEFAZ feita na prévia): valores e quantidades não vêm do navegador.
         Nota nota = xml != null && !xml.isBlank() ? LeitorNfe.ler(xml) : consultaNfce.ler(enderecoQrCode);
         if (notas.existsByChave(nota.chave())) {
             throw new RegraDeNegocioException("A nota nº " + nota.numero() + " de " + nota.emitenteNome() + " já foi importada.");
@@ -161,6 +161,7 @@ public class NotaFiscalService {
             }
         }
         notas.save(new NotaFiscalCompra(nota, fornecedor.getId(), usuario, Instant.now(clock)));
+        consultaNfce.esquecer(nota.chave());
         log.info("NF-e {} importada por {}: {} entrada(s), total {}", nota.chave(), usuario, entradas, nota.valorTotal());
         return new Resultado(nota.chave(), entradas, nota.itens().size() - entradas, nota.valorTotal());
     }

@@ -18,7 +18,9 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -84,6 +86,7 @@ public final class LeitorCupom {
             throw new RegraDeNegocioException("Não foi possível ler os itens do cupom na página da SEFAZ. "
                     + "Confira se o QR Code é de um cupom autorizado ou lance pela Compra sem nota.");
         }
+        itens = juntarRepetidos(itens);
         String pagina = texto(html);
         Matcher total = TOTAL.matcher(pagina);
         BigDecimal valorTotal = total.find() ? numero(total.group(1))
@@ -97,6 +100,22 @@ public final class LeitorCupom {
         String nome = emitente.find() ? limpar(emitente.group(1)) : "CNPJ " + chave.emitenteCnpj();
         return new Nota(chave.chave(), chave.numero(), chave.serie(), chave.emitenteCnpj(), nome, null, emitidaEm,
                 valorTotal, itens);
+    }
+
+    /** O caixa do mercado passa cada pacote numa linha: 4× o mesmo produto vira uma linha com quantidade 4. */
+    static List<Item> juntarRepetidos(List<Item> itens) {
+        Map<String, Item> juntos = new LinkedHashMap<>();
+        for (Item item : itens) {
+            String chave = item.codigo() + '|' + item.descricao() + '|' + item.unidade() + '|' + item.valorUnitario().stripTrailingZeros();
+            juntos.merge(chave, item, (a, b) -> new Item(a.numero(), a.codigo(), a.ean(), a.descricao(), a.ncm(), a.unidade(),
+                    a.quantidade().add(b.quantidade()), a.valorUnitario(), a.valor().add(b.valor())));
+        }
+        List<Item> resultado = new ArrayList<>();
+        for (Item item : juntos.values()) {
+            resultado.add(new Item(resultado.size() + 1, item.codigo(), item.ean(), item.descricao(), item.ncm(), item.unidade(),
+                    item.quantidade(), item.valorUnitario(), item.valor()));
+        }
+        return resultado;
     }
 
     /**

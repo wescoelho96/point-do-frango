@@ -86,6 +86,26 @@ class LeitorCupomTest {
     }
 
     @Test
+    @DisplayName("O mesmo produto passado várias vezes no caixa vira uma linha só, com a quantidade somada")
+    void linhasRepetidasJuntas() throws IOException {
+        String html = pagina();
+        int inicio = html.indexOf("<tr id=\"Item + 2\">");
+        String batata = html.substring(inicio, html.indexOf("</tr>", inicio) + 5);
+        String repetido = html.replace(batata, batata + batata + batata)
+                .replace("<span class=\"totalNumb txtMax\">131,80</span>", "<span class=\"totalNumb txtMax\">281,20</span>");
+
+        var nota = LeitorCupom.ler(qrCode(), repetido, SP);
+
+        assertThat(nota.itens()).hasSize(3);
+        assertThat(nota.itens()).extracting(LeitorNfe.Item::numero).containsExactly(1, 2, 3);
+        var batatas = nota.itens().get(1);
+        assertThat(batatas.descricao()).isEqualTo("BATATA PALITO CONG 2KG");
+        assertThat(batatas.quantidade()).isEqualByComparingTo("9");
+        assertThat(batatas.valor()).isEqualByComparingTo("224.10");
+        assertThat(nota.itens().get(2).descricao()).isEqualTo("CEBOLA KG");
+    }
+
+    @Test
     @DisplayName("Só aceita endereço da SEFAZ (.gov.br) com chave válida no QR Code")
     void enderecoSeguro() {
         assertThat(qrCode().getHost()).isEqualTo("www.nfce.fazenda.sp.gov.br");

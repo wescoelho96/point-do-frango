@@ -24,26 +24,29 @@ function linhaItem(previa, insumos) {
   return previa.itens.map(({ item, insumoSugerido, fatorSugerido }) => {
     const a = analisarItem(item.descricao, item.unidade);
     const insumo = insumos.find((i) => i.id === insumoSugerido) ?? casarInsumo(item.descricao, insumos);
-    const escolha = insumo ? String(insumo.id) : (a.ignorar ? '' : NOVO);
+    const usar = Boolean(insumo) || !a.ignorar;
+    const escolha = insumo ? String(insumo.id) : NOVO;
     const fator = fatorSugerido ?? (insumo ? fatorPara(item.descricao, item.unidade, insumo) : a.fator);
     return html`
-      <tr data-item="${item.numero}">
-        <td>${item.descricao}<div class="muted" style="font-size:.78rem">${numero(item.quantidade)} ${item.unidade} · ${moeda(item.valor)}
+      <tr data-item="${item.numero}" class="${usar ? '' : 'item-ignorado'}">
+        <td><label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer">
+          <input type="checkbox" name="usar-${item.numero}" ${usar ? 'checked' : ''} style="width:auto;margin-top:3px"
+            aria-label="Dar entrada no estoque deste item" title="Desmarque o que não é estoque (ex.: limpeza, consumo próprio)">
+          <span>${item.descricao}<div class="muted" style="font-size:.78rem">${numero(item.quantidade)} ${item.unidade} · ${moeda(item.valor)}
           ${a.grupo ? html` · <span class="badge">${a.grupo}</span>` : ''}
-          ${insumoSugerido ? html` · <span class="badge badge-good">lembrado da última compra</span>` : ''}</div></td>
-        <td><select name="insumo-${item.numero}" aria-label="Insumo do item ${item.numero}">
-            <option value="" ${escolha === '' ? 'selected' : ''}>— não é estoque (ignorar) —</option>
+          ${insumoSugerido ? html` · <span class="badge badge-good">lembrado da última compra</span>` : ''}</div></span></label></td>
+        <td><select name="insumo-${item.numero}" aria-label="Insumo do item ${item.numero}" ${usar ? '' : 'disabled'}>
             <option value="${NOVO}" ${escolha === NOVO ? 'selected' : ''}>+ Cadastrar como novo insumo</option>
             ${insumos.filter((i) => i.ativo).map((i) => html`<option value="${i.id}" ${escolha === String(i.id) ? 'selected' : ''}>${i.nome}</option>`)}
           </select>
-          <div class="form-grid ${escolha === NOVO ? '' : 'hidden'}" data-novo="${item.numero}" style="margin-top:6px;gap:6px">
+          <div class="form-grid ${usar && escolha === NOVO ? '' : 'hidden'}" data-novo="${item.numero}" style="margin-top:6px;gap:6px">
             <input name="nome-${item.numero}" maxlength="100" value="${a.nome}" aria-label="Nome do novo insumo" title="Nome do novo insumo">
             <input name="grupo-${item.numero}" maxlength="40" value="${a.grupo ?? ''}" list="grupos-compra" placeholder="Grupo" aria-label="Grupo">
             <select name="unidade-${item.numero}" aria-label="Controlar estoque em">
               ${Object.entries(SIGLA).map(([u, s]) => html`<option value="${u}" ${a.unidade === u ? 'selected' : ''}>em ${s}</option>`)}
             </select>
           </div></td>
-        <td style="width:110px"><input name="fator-${item.numero}" inputmode="decimal" value="${String(fator).replace('.', ',')}"
+        <td style="width:110px"><input name="fator-${item.numero}" inputmode="decimal" value="${String(fator).replace('.', ',')}" ${usar ? '' : 'disabled'}
           aria-label="Quantas unidades em cada" title="Quantas unidades do insumo vêm em 1 ${item.unidade} da nota"></td>
         <td class="num right muted" data-entra="${item.numero}"></td>
       </tr>`;
@@ -134,22 +137,50 @@ export function abrirImportacao(insumos, aoImportar) {
       const info = form.querySelector('[data-info]');
       const mostrar = (conteudo) => { info.innerHTML = String(conteudo); };
 
-      const atualizarEntradas = () => previa?.itens.forEach(({ item }) => {
-        const escolha = form[`insumo-${item.numero}`].value;
-        const sigla = escolha === NOVO ? SIGLA[form[`unidade-${item.numero}`].value]
-          : insumos.find((i) => i.id === Number(escolha))?.sigla;
-        const quantidade = item.quantidade * (decimal(form[`fator-${item.numero}`].value) || 0);
-        const entra = form.querySelector(`[data-entra="${item.numero}"]`);
-        if (!sigla) { entra.textContent = 'ignorado'; return; }
-        entra.textContent = `${escolha === NOVO ? 'novo · ' : ''}${numero(quantidade)} ${sigla}`
-          + (quantidade ? ` · ${moeda(item.valor / quantidade)}/${sigla}` : '');
-      });
+      const usado = (n) => form[`usar-${n}`].checked;
+
+      const atualizarEntradas = () => {
+        if (!previa) return;
+        let quantos = 0;
+        let valor = 0;
+        previa.itens.forEach(({ item }) => {
+          const escolha = form[`insumo-${item.numero}`].value;
+          const sigla = escolha === NOVO ? SIGLA[form[`unidade-${item.numero}`].value]
+            : insumos.find((i) => i.id === Number(escolha))?.sigla;
+          const quantidade = item.quantidade * (decimal(form[`fator-${item.numero}`].value) || 0);
+          const entra = form.querySelector(`[data-entra="${item.numero}"]`);
+          if (!usado(item.numero) || !sigla) { entra.textContent = 'não entra'; return; }
+          quantos += 1;
+          valor += item.valor;
+          entra.textContent = `${escolha === NOVO ? 'novo · ' : ''}${numero(quantidade)} ${sigla}`
+            + (quantidade ? ` · ${moeda(item.valor / quantidade)}/${sigla}` : '');
+        });
+        form.querySelector('[data-resumo]').innerHTML = String(html`Dão entrada no estoque: <strong>${quantos} de ${previa.itens.length}</strong>
+          itens · ${moeda(valor)}${valor < previa.nota.valorTotal - 0.005
+            ? html` <span class="muted">(o pagamento continua sendo o total do cupom, ${moeda(previa.nota.valorTotal)})</span>` : ''}`);
+        const todos = form.querySelector('[data-todos]');
+        todos.checked = quantos === previa.itens.length;
+        todos.indeterminate = quantos > 0 && quantos < previa.itens.length;
+      };
+
+      const marcar = (numeroItem, usar) => {
+        form[`usar-${numeroItem}`].checked = usar;
+        form.querySelector(`tr[data-item="${numeroItem}"]`).classList.toggle('item-ignorado', !usar);
+        form[`insumo-${numeroItem}`].disabled = !usar;
+        form[`fator-${numeroItem}`].disabled = !usar;
+        form.querySelector(`[data-novo="${numeroItem}"]`).classList.toggle('hidden', !usar || form[`insumo-${numeroItem}`].value !== NOVO);
+      };
 
       // Trocar o insumo (ou a unidade do novo) recalcula quantas unidades entram por item da nota.
       form.addEventListener('change', (ev) => {
-        const [, campo, numeroItem] = /^(insumo|unidade)-(\d+)$/.exec(ev.target.name ?? '') ?? [];
+        if (ev.target.matches('[data-todos]')) {
+          previa?.itens.forEach(({ item }) => marcar(item.numero, ev.target.checked));
+          return;
+        }
+        const [, campo, numeroItem] = /^(usar|insumo|unidade)-(\d+)$/.exec(ev.target.name ?? '') ?? [];
         const linha = numeroItem && previa?.itens.find(({ item }) => String(item.numero) === numeroItem);
         if (!linha) return;
+        if (campo === 'usar') { marcar(numeroItem, ev.target.checked); return; }
         const { item } = linha;
         const escolha = form[`insumo-${numeroItem}`].value;
         form.querySelector(`[data-novo="${numeroItem}"]`).classList.toggle('hidden', escolha !== NOVO);
@@ -168,8 +199,11 @@ export function abrirImportacao(insumos, aoImportar) {
           ${previa.paraOutroCnpj ? html`<div class="bad">⚠️ A nota foi emitida para outro CNPJ, não o da loja (Config. → Loja).</div>` : ''}
           ${chaveDigitada.length === 44 && chaveDigitada !== n.chave ? html`<div class="bad">⚠️ A compra lida é de outra nota, não da chave digitada.</div>` : ''}`);
         form.querySelector('[data-itens]').innerHTML = String(html`
-          <table><thead><tr><th>Item</th><th>Insumo do estoque</th><th>Unid. em cada</th><th>Entra</th></tr></thead>
+          <label style="display:flex;gap:8px;align-items:center;cursor:pointer;margin-bottom:4px">
+            <input type="checkbox" data-todos style="width:auto"> Marcar / desmarcar todos</label>
+          <table><thead><tr><th>Item (desmarque o que não entra)</th><th>Insumo do estoque</th><th>Unid. em cada</th><th>Entra</th></tr></thead>
             <tbody>${linhaItem(previa, insumos)}</tbody></table>
+          <p data-resumo style="margin:8px 0 0"></p>
           <datalist id="grupos-compra">${GRUPOS_SUGERIDOS.map((g) => html`<option value="${g}">`)}</datalist>
           <p class="muted" style="margin:6px 0 0;font-size:.8rem">Grupo, pack e medida saem da descrição: "15X269ML" = 15 unidades,
             "C/50" = 50, "2KG" = 2 kg. Confira a coluna <strong>Entra</strong> (quantidade e custo de cada unidade).
@@ -238,6 +272,10 @@ export function abrirImportacao(insumos, aoImportar) {
       if (previa.jaImportada) throw new Error('Esta compra já foi importada.');
       const itens = [];
       for (const { item } of previa.itens) {
+        if (d[`usar-${item.numero}`] !== 'on') {
+          itens.push({ numero: item.numero, insumoId: null, fator: null });
+          continue;
+        }
         let insumoId = d[`insumo-${item.numero}`] ? Number(d[`insumo-${item.numero}`]) : null;
         if (d[`insumo-${item.numero}`] === NOVO) {
           const nome = d[`nome-${item.numero}`]?.trim();
