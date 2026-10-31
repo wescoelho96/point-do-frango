@@ -13,26 +13,26 @@ import java.util.Optional;
 
 public interface PedidoRepository extends JpaRepository<Pedido, Long> {
 
-    @EntityGraph(attributePaths = {"itens", "comanda", "entregador"})
+    @EntityGraph(attributePaths = {"itens", "comanda", "entregador", "partes"})
     Optional<Pedido> findWithItensById(Long id);
 
     /** Intervalo semiaberto [inicio, fim): meia-noite do dia seguinte não entra. */
-    @EntityGraph(attributePaths = {"itens", "comanda", "entregador"})
+    @EntityGraph(attributePaths = {"itens", "comanda", "entregador", "partes"})
     @Query("select p from Pedido p where p.criadoEm >= :inicio and p.criadoEm < :fim order by p.criadoEm desc")
     List<Pedido> doPeriodo(Instant inicio, Instant fim);
 
-    @EntityGraph(attributePaths = {"itens", "comanda", "entregador"})
+    @EntityGraph(attributePaths = {"itens", "comanda", "entregador", "partes"})
     List<Pedido> findByStatusInOrderByCriadoEmAsc(Collection<StatusPedido> status);
 
     /** Entregas que o motoboy fez e ainda não recebeu (de qualquer dia). */
-    @EntityGraph(attributePaths = {"itens", "comanda", "entregador"})
+    @EntityGraph(attributePaths = {"itens", "comanda", "entregador", "partes"})
     @Query("select p from Pedido p where p.entregador is not null and p.acertoEntregadorId is null and p.motoboyPagoFora = false "
             + "and p.status <> com.pointdofrango.pedido.StatusPedido.CANCELADO order by p.criadoEm")
     List<Pedido> entregasSemAcerto();
 
     List<Pedido> findByAcertoEntregadorId(Long movimentoId);
 
-    @EntityGraph(attributePaths = {"itens", "comanda", "entregador"})
+    @EntityGraph(attributePaths = {"itens", "comanda", "entregador", "partes"})
     @Query("select p from Pedido p where p.formaPagamento = com.pointdofrango.financeiro.FormaPagamento.CORTESIA "
             + "and p.status <> com.pointdofrango.pedido.StatusPedido.CANCELADO and p.criadoEm >= :desde order by p.criadoEm desc")
     List<Pedido> cortesiasDesde(Instant desde);

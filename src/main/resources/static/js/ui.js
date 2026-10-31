@@ -98,7 +98,7 @@ export function somarDias(isoDate, dias) {
 
 export const ROTULOS = {
   BALCAO: 'Balcão', MESA: 'Mesa', WHATSAPP: 'WhatsApp', TELEFONE: 'Telefone', IFOOD: 'iFood', NOVENTA_NOVE_FOOD: '99Food',
-  DINHEIRO: 'Dinheiro', PIX: 'PIX', DEBITO: 'Débito', CREDITO: 'Crédito', A_RECEBER: 'A receber (comanda aberta)', PAGO_NO_APP: 'Pago no app',
+  DINHEIRO: 'Dinheiro', PIX: 'PIX', DEBITO: 'Débito', CREDITO: 'Crédito', A_RECEBER: 'A receber (comanda aberta)', PAGO_NO_APP: 'Pago no app', DIVIDIDO: 'Dividido',
   EM_PREPARO: 'Em preparo', PRONTO: 'Pronto', ENTREGUE: 'Entregue', CANCELADO: 'Cancelado',
   ENTRADA: 'Entrada', SAIDA_VENDA: 'Venda', ESTORNO_VENDA: 'Estorno', AJUSTE: 'Ajuste',
   QUILOGRAMA: 'Quilograma (kg)', GRAMA: 'Grama (g)', LITRO: 'Litro (L)', MILILITRO: 'Mililitro (ml)', UNIDADE: 'Unidade (un)',
@@ -113,6 +113,10 @@ export const ROTULOS = {
   PAGA: 'Paga', PARCIAL: 'Parcial', PENDENTE: 'Pendente', ATRASADA: 'Atrasada',
 };
 export const rotulo = (k) => ROTULOS[k] ?? k;
+/** Forma de pagamento do pedido; na conta dividida mostra as partes (ex.: "PIX R$ 37,50 + Crédito R$ 18,75"). */
+export const formaDoPedido = (p) => (p.formaPagamento === 'DIVIDIDO' && p.pagamentos?.length
+  ? p.pagamentos.map((x) => `${rotulo(x.forma)} ${moeda(x.valor)}`).join(' + ')
+  : rotulo(p.formaPagamento));
 
 // Mesma ordem do DayOfWeek do Java; getDay() do JS começa no domingo
 export const DIAS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];

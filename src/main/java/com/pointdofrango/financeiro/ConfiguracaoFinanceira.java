@@ -90,6 +90,7 @@ public class ConfiguracaoFinanceira {
             case CREDITO -> taxaCredito;
             case PAGO_NO_APP -> BigDecimal.ZERO; // taxa informada em reais no lançamento
             case CORTESIA -> BigDecimal.ZERO;
+            case DIVIDIDO -> BigDecimal.ZERO; // a taxa é a soma das partes (Pedido.taxaDasPartes)
         };
     }
 

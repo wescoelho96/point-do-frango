@@ -7,7 +7,9 @@ import { blocoPotes } from './potes.js';
 const CANAIS = ['BALCAO', 'WHATSAPP', 'TELEFONE'];
 const FORMAS = ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO'];
 // Cortesia (pedido dado de graça) só aparece para o dono
-const formasDoPerfil = () => (sessao.admin() ? [...FORMAS, 'CORTESIA'] : FORMAS);
+const formasDoPerfil = () => (sessao.admin() ? [...FORMAS, 'DIVIDIDO', 'CORTESIA'] : [...FORMAS, 'DIVIDIDO']);
+const ROTULO_BOTAO = { DIVIDIDO: '➗ Dividir' };
+const centavos = (v) => Math.round(v * 100) / 100;
 const ORDEM_CATEGORIAS = ['PORCAO', 'ESPETINHO', 'COMBO', 'BEBIDA', 'OUTRO'];
 
 /** params.comanda = id da comanda vinda da tela de Comandas (#pdv?comanda=3). */
@@ -23,6 +25,11 @@ export async function montar(container, params = {}) {
     comandaId: params.comanda ? Number(params.comanda) : null,
     canal: 'BALCAO',
     forma: 'PIX',
+    desconto: '', // como foi digitado: "5" (reais) ou "10%"
+    // Conta dividida: [{ forma, valor }]; partesAuto = ainda é a divisão igual (acompanha o total)
+    partes: [],
+    partesAuto: true,
+    pessoas: 2,
     entrega: false,
     bairroId: null,
     entregadorId: null, // id do motoboy ou 'DONO'
@@ -80,7 +87,33 @@ export async function montar(container, params = {}) {
       </div>`;
   }
   const cortesia = () => estado.destino === 'DIRETA' && estado.forma === 'CORTESIA';
-  const total = () => (cortesia() ? 0 : totalItens() + taxaEntrega());
+  const dividido = () => estado.destino === 'DIRETA' && estado.forma === 'DIVIDIDO';
+  /** Desconto em reais: "10%" vira 10% dos itens; nunca passa do valor dos itens. */
+  const valorDesconto = () => {
+    if (cortesia() || estado.destino !== 'DIRETA') return 0;
+    const texto = String(estado.desconto).trim();
+    if (!texto) return 0;
+    const v = texto.endsWith('%') ? totalItens() * (decimal(texto.slice(0, -1)) || 0) / 100 : decimal(texto) || 0;
+    return Math.min(Math.max(centavos(v), 0), totalItens());
+  };
+  const total = () => (cortesia() ? 0 : centavos(totalItens() - valorDesconto() + taxaEntrega()));
+  const somaPartes = () => centavos(estado.partes.reduce((s, p) => s + (decimal(p.valor) || 0), 0));
+  /** O que é pago em dinheiro (para o troco): tudo, ou só a parte em dinheiro da conta dividida. */
+  const emDinheiro = () => (dividido()
+    ? centavos(estado.partes.filter((p) => p.forma === 'DINHEIRO').reduce((s, p) => s + (decimal(p.valor) || 0), 0))
+    : estado.forma === 'DINHEIRO' ? total() : 0);
+
+  /** Divide o total em n partes iguais; os centavos que sobram vão para a última. Mantém a forma de cada parte. */
+  function dividirIgual(n) {
+    const qtd = Math.min(Math.max(Math.round(n) || 2, 2), 10);
+    const base = Math.floor(total() * 100 / qtd) / 100;
+    estado.pessoas = qtd;
+    estado.partes = Array.from({ length: qtd }, (_, i) => ({
+      forma: estado.partes[i]?.forma ?? 'PIX',
+      valor: (i === qtd - 1 ? centavos(total() - base * (qtd - 1)) : base).toFixed(2).replace('.', ','),
+    }));
+    estado.partesAuto = true;
+  }
   const qtdItens = () => [...estado.itens.values()].reduce((s, q) => s + q, 0);
   const comandaAtual = () => estado.comandas.find((c) => c.id === estado.comandaId);
 
@@ -166,19 +199,56 @@ export async function montar(container, params = {}) {
       <div>
         <div class="muted" style="font-size:.8rem;margin-bottom:4px">Pagamento</div>
         <div class="segmented">
-          ${formasDoPerfil().map((f) => html`<button data-acao="forma" data-v="${f}" class="${f === estado.forma ? 'on' : ''}">${rotulo(f)}</button>`)}
+          ${formasDoPerfil().map((f) => html`<button data-acao="forma" data-v="${f}" class="${f === estado.forma ? 'on' : ''}">${ROTULO_BOTAO[f] ?? rotulo(f)}</button>`)}
         </div>
       </div>
+      ${estado.forma !== 'CORTESIA' ? html`
+        <label class="row" style="flex-wrap:nowrap;align-items:center;gap:8px;font-size:.85rem">Desconto
+          <input data-campo="desconto" value="${estado.desconto}" inputmode="decimal" autocomplete="off" style="max-width:130px"
+            placeholder="R$ ou %" aria-label="Desconto em reais ou porcentagem (ex.: 5 ou 10%)">
+          <span class="muted" data-desconto>${valorDesconto() ? `- ${moeda(valorDesconto())}` : ''}</span></label>` : ''}
+      ${dividido() ? painelDivisao() : ''}
       ${estado.forma === 'CORTESIA' ? html`
         <input name="motivoCortesia" maxlength="150" autocomplete="off" placeholder="Para quem / por quê (ex.: cliente fiel, aniversário)" aria-label="Motivo da cortesia">
         <p class="muted" style="margin:0;font-size:.8rem">Sai do estoque e vai para a cozinha normalmente, sem cobrar nada
           (nem a entrega). O custo aparece no Financeiro e a lista fica em Estoque → Cortesias.</p>` : ''}
-      ${estado.forma === 'DINHEIRO' ? html`
+      ${estado.forma === 'DINHEIRO' || (dividido() && estado.partes.some((p) => p.forma === 'DINHEIRO')) ? html`
         <div class="row" style="flex-wrap:nowrap;align-items:center">
           <input name="valorRecebido" inputmode="decimal" autocomplete="off" style="max-width:170px"
-                 placeholder="${ehEntrega() ? 'Troco para (R$)' : 'Cliente entregou (R$)'}" aria-label="Valor recebido">
+                 placeholder="${ehEntrega() ? 'Troco para (R$)' : dividido() ? 'Entregou em dinheiro (R$)' : 'Cliente entregou (R$)'}" aria-label="Valor recebido">
           <span class="troco" data-troco></span>
         </div>` : ''}`;
+  }
+
+  function painelDivisao() {
+    return html`
+      <div class="card stack" style="padding:10px;gap:8px">
+        <div class="row" style="flex-wrap:nowrap;align-items:center;gap:6px;font-size:.85rem">
+          Dividir igual em
+          <input data-campo="pessoas" type="number" min="2" max="10" value="${estado.pessoas}" style="width:64px" aria-label="Quantas partes">
+          <button type="button" class="btn btn-sm" data-acao="dividir-igual">Dividir</button>
+        </div>
+        ${estado.partes.map((p, i) => html`
+          <div class="row" style="flex-wrap:nowrap;gap:6px">
+            <select data-parte-forma="${i}" aria-label="Forma da parte ${i + 1}">
+              ${FORMAS.map((f) => html`<option value="${f}" ${f === p.forma ? 'selected' : ''}>${rotulo(f)}</option>`)}
+            </select>
+            <input data-parte-valor="${i}" value="${p.valor}" inputmode="decimal" autocomplete="off" style="max-width:110px"
+              aria-label="Valor da parte ${i + 1}">
+            <button type="button" class="btn btn-icon btn-sm" data-acao="remover-parte" data-i="${i}" aria-label="Tirar esta parte"
+              ${estado.partes.length <= 2 ? 'disabled' : ''}>✕</button>
+          </div>`)}
+        <div class="row" style="align-items:center">
+          <button type="button" class="btn btn-sm" data-acao="add-parte" ${estado.partes.length >= 10 ? 'disabled' : ''}>+ Parte</button>
+          <span class="spacer"></span><span data-falta style="font-size:.85rem">${faltaHtml()}</span>
+        </div>
+      </div>`;
+  }
+
+  function faltaHtml() {
+    const diferenca = centavos(total() - somaPartes());
+    if (Math.abs(diferenca) < 0.005) return html`<span class="good">✓ fecha ${moeda(total())}</span>`;
+    return diferenca > 0 ? html`<span class="bad">Falta ${moeda(diferenca)}</span>` : html`<span class="bad">Passou ${moeda(-diferenca)}</span>`;
   }
 
   function painelUltimo() {
@@ -204,6 +274,8 @@ export async function montar(container, params = {}) {
   }
 
   function desenhar() {
+    // Enquanto ninguém mexeu nos valores, as partes acompanham o total (item novo, desconto, entrega)
+    if (dividido() && (!estado.partes.length || estado.partesAuto)) dividirIgual(estado.partes.length || estado.pessoas);
     const porCategoria = ORDEM_CATEGORIAS
       .map((cat) => [cat, estado.produtos.filter((p) => p.categoria === cat)])
       .filter(([, lista]) => lista.length);
@@ -270,11 +342,18 @@ export async function montar(container, params = {}) {
           </form>
           ${ehEntrega() ? html`
             <div class="cupom-linha"><span>Itens</span><span class="num">${moeda(totalItens())}</span></div>
+            <div class="cupom-linha ${valorDesconto() ? '' : 'hidden'}" data-linha-desconto><span>Desconto</span>
+              <span class="num" data-desconto>- ${moeda(valorDesconto())}</span></div>
             <div class="cupom-linha"><span>Entrega${bairro() ? ` (${bairro().nome})` : ''}</span>
               <span class="num">${!bairro() ? 'escolha o bairro' : estado.gratis ? 'grátis' : moeda(taxaEntrega())}</span></div>
             ${estado.gratis && bairro() && estado.entregadorId !== 'DONO' ? html`<p class="muted" style="margin:0;font-size:.78rem">
               A loja paga ${moeda(bairro().taxaEntrega)} ao motoboy por esta entrega.</p>` : ''}` : ''}
-          <div class="total"><span>Total</span><span class="num">${moeda(total())}</span></div>
+          ${!ehEntrega() && !naComanda ? html`
+            <div class="${valorDesconto() ? '' : 'hidden'}" data-linha-desconto>
+              <div class="cupom-linha"><span>Itens</span><span class="num">${moeda(totalItens())}</span></div>
+              <div class="cupom-linha"><span>Desconto</span><span class="num" data-desconto>- ${moeda(valorDesconto())}</span></div>
+            </div>` : ''}
+          <div class="total"><span>Total</span><span class="num" data-total>${moeda(total())}</span></div>
           <button class="btn btn-primary btn-block" data-acao="lancar" ${podeEnviar ? '' : 'disabled'}>
             ${estado.enviando ? 'Enviando…' : naComanda ? '🍳 Enviar para a cozinha' : 'Lançar pedido'}
           </button>
@@ -283,7 +362,7 @@ export async function montar(container, params = {}) {
         </aside>
         <button class="barra-pedido so-celular" data-acao="gaveta" ${estado.itens.size || estado.ultimo ? '' : 'hidden'}>
           <span>${qtdItens() ? `${qtdItens()} ${qtdItens() > 1 ? 'itens' : 'item'}` : 'Ver pedido'}</span>
-          <strong class="num">${moeda(total())}</strong>
+          <strong class="num" data-total>${moeda(total())}</strong>
         </button>
       </div>`);
     atualizarTroco();
@@ -292,7 +371,7 @@ export async function montar(container, params = {}) {
   function atualizarTroco() {
     const alvo = container.querySelector('[data-troco]');
     const campo = container.querySelector('[name=valorRecebido]');
-    if (alvo && campo) alvo.innerHTML = String(trocoHtml(total(), decimal(campo.value)));
+    if (alvo && campo) alvo.innerHTML = String(trocoHtml(emDinheiro(), decimal(campo.value)));
   }
 
   // Preserva o que foi digitado nos campos entre redesenhos
@@ -340,9 +419,13 @@ export async function montar(container, params = {}) {
       toast('Na cortesia, informe para quem foi ou o motivo.', 'erro');
       return;
     }
-    const recebido = estado.forma === 'DINHEIRO' ? decimal(campos.valorRecebido) : null;
-    if (recebido != null && recebido < total() - 0.004) {
-      toast(`O valor recebido é menor que o total (${moeda(total())}).`, 'erro');
+    if (!naComanda && dividido() && Math.abs(total() - somaPartes()) >= 0.005) {
+      toast(`As partes somam ${moeda(somaPartes())}, mas o total é ${moeda(total())}.`, 'erro');
+      return;
+    }
+    const recebido = !naComanda && emDinheiro() > 0 ? decimal(campos.valorRecebido) : null;
+    if (recebido != null && recebido < emDinheiro() - 0.004) {
+      toast(`O valor recebido é menor que o ${dividido() ? 'que é pago em dinheiro' : 'total'} (${moeda(emDinheiro())}).`, 'erro');
       return;
     }
     estado.enviando = true;
@@ -360,6 +443,8 @@ export async function montar(container, params = {}) {
           clienteTelefone: campos.clienteTelefone || null, enderecoEntrega: campos.enderecoEntrega || null,
           valorRecebido: recebido, salvarCliente: estado.canal !== 'BALCAO' && estado.salvarCliente,
           motivoCortesia: cortesia() ? campos.motivoCortesia.trim() : null,
+          desconto: valorDesconto() || null,
+          pagamentos: dividido() ? estado.partes.map((p) => ({ forma: p.forma, valor: decimal(p.valor) })) : null,
           entrega: ehEntrega() ? {
             bairroId: estado.bairroId, referencia: campos.referencia || null, gratis: estado.gratis,
             entregadorId: estado.entregadorId === 'DONO' ? null : estado.entregadorId, peloDono: estado.entregadorId === 'DONO',
@@ -376,6 +461,10 @@ export async function montar(container, params = {}) {
       estado.bairroId = null;
       estado.gratis = gratisHoje();
       estado.semPromocao = false;
+      estado.desconto = '';
+      estado.partes = [];
+      estado.partesAuto = true;
+      if (estado.forma === 'DIVIDIDO') estado.forma = 'PIX';
       toast(outroDia ? `Pedido #${pedido.id} lançado no dia ${new Date(pedido.criadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`
         : pedido.status === 'ENTREGUE'
         ? `Pedido #${pedido.id} registrado: só bebida, sai direto do balcão${pedido.comanda ? ` (na conta de ${pedido.comanda})` : ''}`
@@ -416,6 +505,21 @@ export async function montar(container, params = {}) {
     canal: (el) => { estado.canal = el.dataset.v; redesenhar(); },
     entrega: (el) => { estado.entrega = el.dataset.v === '1'; redesenhar(); },
     forma: (el) => { estado.forma = el.dataset.v; redesenhar(); },
+    'dividir-igual': () => {
+      dividirIgual(Number(container.querySelector('[data-campo=pessoas]')?.value) || estado.pessoas);
+      redesenhar();
+    },
+    'add-parte': () => {
+      const falta = Math.max(centavos(total() - somaPartes()), 0);
+      estado.partes.push({ forma: 'PIX', valor: falta.toFixed(2).replace('.', ',') });
+      estado.partesAuto = false;
+      redesenhar();
+    },
+    'remover-parte': (el) => {
+      estado.partes.splice(Number(el.dataset.i), 1);
+      estado.partesAuto = false;
+      redesenhar();
+    },
     limpar: () => { estado.itens.clear(); redesenhar(); },
     gaveta: () => { estado.gavetaAberta = !estado.gavetaAberta; redesenhar(); },
     'imprimir-ultimo': () => imprimirVenda(estado.ultimo).catch(toastErro),
@@ -439,9 +543,34 @@ export async function montar(container, params = {}) {
     if (campo === 'salvar') estado.salvarCliente = ev.target.checked;
     if (campo === 'realizado') { estado.realizadoEm = ev.target.value; redesenhar(); }
     if (campo === 'motoboyPago') estado.motoboyJaPago = ev.target.checked;
+    if (ev.target.dataset.parteForma != null) {
+      estado.partes[Number(ev.target.dataset.parteForma)].forma = ev.target.value;
+      redesenhar(); // mostra ou esconde o campo do dinheiro entregue
+    }
     if (ev.target.name === 'clienteTelefone') buscarCliente(ev.target.value);
   };
-  const aoDigitar = (ev) => { if (ev.target.name === 'valorRecebido') atualizarTroco(); };
+  // Digitar atualiza totais e a conferência das partes sem redesenhar (o cursor continua no campo)
+  const aoDigitar = (ev) => {
+    const alvo = ev.target;
+    if (alvo.dataset.campo === 'desconto') {
+      estado.desconto = alvo.value;
+      container.querySelectorAll('[data-total]').forEach((el) => { el.textContent = moeda(total()); });
+      container.querySelectorAll('[data-desconto]').forEach((el) => { el.textContent = valorDesconto() ? `- ${moeda(valorDesconto())}` : ''; });
+      container.querySelectorAll('[data-linha-desconto]').forEach((el) => el.classList.toggle('hidden', !valorDesconto()));
+      if (dividido() && estado.partesAuto) {
+        dividirIgual(estado.partes.length);
+        container.querySelectorAll('[data-parte-valor]').forEach((el) => { el.value = estado.partes[Number(el.dataset.parteValor)].valor; });
+      }
+    }
+    if (alvo.dataset.campo === 'pessoas') estado.pessoas = Number(alvo.value) || estado.pessoas;
+    if (alvo.dataset.parteValor != null) {
+      estado.partes[Number(alvo.dataset.parteValor)].valor = alvo.value;
+      estado.partesAuto = false;
+    }
+    const falta = container.querySelector('[data-falta]');
+    if (falta) falta.innerHTML = String(faltaHtml());
+    atualizarTroco();
+  };
   container.addEventListener('change', aoMudarCampo);
   container.addEventListener('input', aoDigitar);
   // Enter num campo não pode "enviar" o formulário (recarregaria a página)

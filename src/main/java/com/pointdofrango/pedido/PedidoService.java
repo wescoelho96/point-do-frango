@@ -145,6 +145,19 @@ public class PedidoService {
                     ? "Pedidos de iFood/99Food são lançados com as taxas do app (Pedidos → \"Pedido iFood / 99Food\")."
                     : "\"Pago no app\" só vale para pedidos do iFood/99Food.");
         }
+        boolean dividido = req.formaPagamento() == FormaPagamento.DIVIDIDO;
+        if (dividido && comanda != null) {
+            throw new RegraDeNegocioException("Na comanda, a forma de pagamento é escolhida ao fechar a conta.");
+        }
+        if (!dividido && req.pagamentos() != null && !req.pagamentos().isEmpty()) {
+            throw new RegraDeNegocioException("As partes do pagamento só valem na conta dividida.");
+        }
+        boolean comDesconto = req.desconto() != null && req.desconto().signum() > 0;
+        if (comDesconto && (comanda != null || plataforma != null || req.formaPagamento() == FormaPagamento.CORTESIA)) {
+            throw new RegraDeNegocioException(req.formaPagamento() == FormaPagamento.CORTESIA
+                    ? "Cortesia já é de graça: não leva desconto."
+                    : "Desconto só na venda direta (na comanda e no app ele não vale).");
+        }
 
         String telefone = limpar(req.clienteTelefone()) == null ? null : Cliente.normalizarTelefone(req.clienteTelefone());
         Entrega entrega = req.entrega() == null ? null : validarEntrega(req, comanda, telefone, retroativo);
@@ -205,6 +218,7 @@ public class PedidoService {
             pedido.tornarCortesia(req.motivoCortesia());
         }
         if (plataforma == null) {
+            pedido.aplicarDesconto(req.desconto());
             pedido.fecharValores(configuracaoService.obter());
             // Sem item de preparo (ex.: só bebida) não entra na fila da cozinha
             if (retroativo || quantidades.keySet().stream().noneMatch(id -> produtos.get(id).isVaiParaCozinha())) {
@@ -228,6 +242,10 @@ public class PedidoService {
                 }
                 pedido.registrarMotoboyPagoFora();
             }
+        }
+        if (dividido) {
+            pedido.dividirPagamento(req.pagamentos() == null ? List.of() : req.pagamentos().stream()
+                    .map(p -> new PartePagamento(p.forma(), p.valor())).toList(), configuracaoService.obter());
         }
         if (comanda == null) {
             pedido.registrarValorRecebido(req.valorRecebido());

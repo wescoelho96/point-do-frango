@@ -9,7 +9,9 @@ import com.pointdofrango.produto.Produto;
 import com.pointdofrango.shared.Dinheiro;
 import com.pointdofrango.shared.RegraDeNegocioException;
 import jakarta.persistence.CascadeType;
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -21,13 +23,18 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderColumn;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.BatchSize;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 
 @Entity
 @Table(name = "pedido")
@@ -126,6 +133,20 @@ public class Pedido {
     @Column(precision = 10, scale = 2)
     private BigDecimal valorRecebido;
 
+    /** Desconto dado no balcão: valorTotal já vem com ele descontado. */
+    @Column(precision = 10, scale = 2)
+    private BigDecimal desconto;
+
+    /**
+     * Só na conta dividida (forma DIVIDIDO): somam o total a cobrar. Carregadas já na consulta (o JSON é montado
+     * fora da transação), em lotes, para a lista de pedidos não virar uma consulta por pedido.
+     */
+    @ElementCollection(fetch = FetchType.EAGER)
+    @BatchSize(size = 100)
+    @CollectionTable(name = "pedido_pagamento", joinColumns = @JoinColumn(name = "pedido_id"))
+    @OrderColumn(name = "ordem")
+    private List<PartePagamento> partes = new ArrayList<>();
+
     protected Pedido() {
     }
 
@@ -211,14 +232,81 @@ public class Pedido {
         itens.add(ItemPedido.brinde(this, produto, quantidade, custoUnitario, promocao));
     }
 
+    /** Desconto do balcão sobre os itens. Chamado antes de fechar os valores. */
+    void aplicarDesconto(BigDecimal valor) {
+        this.desconto = valor == null || valor.signum() == 0 ? null : Dinheiro.centavos(valor);
+    }
+
     /** Fecha o valor e calcula os potes. Chamado uma vez, depois de adicionar os itens. */
     public void fecharValores(ConfiguracaoFinanceira config) {
         if (itens.isEmpty()) {
             throw new RegraDeNegocioException("O pedido precisa de pelo menos um item.");
         }
-        this.valorTotal = Dinheiro.centavos(itens.stream().map(ItemPedido::subtotal).reduce(BigDecimal.ZERO, BigDecimal::add));
-        BigDecimal cmv = itens.stream().map(ItemPedido::custoTotal).reduce(BigDecimal.ZERO, BigDecimal::add);
-        this.distribuicao = RateioFinanceiro.calcular(valorTotal, cmv, formaPagamento, config);
+        BigDecimal doCardapio = Dinheiro.centavos(itens.stream().map(ItemPedido::subtotal).reduce(BigDecimal.ZERO, BigDecimal::add));
+        if (desconto != null) {
+            if (desconto.signum() < 0) {
+                throw new RegraDeNegocioException("O desconto não pode ser negativo.");
+            }
+            if (desconto.compareTo(doCardapio) >= 0) {
+                throw new RegraDeNegocioException("O desconto (R$ %s) precisa ser menor que o valor dos itens (R$ %s). Para dar de graça, use Cortesia."
+                        .formatted(desconto, doCardapio));
+            }
+        }
+        this.valorTotal = desconto == null ? doCardapio : doCardapio.subtract(desconto);
+        this.distribuicao = RateioFinanceiro.calcular(valorTotal, cmv(), formaPagamento, config);
+    }
+
+    private BigDecimal cmv() {
+        return itens.stream().map(ItemPedido::custoTotal).reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * Conta dividida: cada parte paga a taxa da sua forma (o PIX não paga a do crédito).
+     * Chamado depois da entrega, porque as partes somam o total a cobrar.
+     */
+    void dividirPagamento(List<PartePagamento> novas, ConfiguracaoFinanceira config) {
+        if (formaPagamento != FormaPagamento.DIVIDIDO) {
+            throw new RegraDeNegocioException("As partes do pagamento só valem na conta dividida.");
+        }
+        if (novas == null || novas.size() < 2) {
+            throw new RegraDeNegocioException("Na conta dividida, informe pelo menos duas partes (forma e valor).");
+        }
+        BigDecimal soma = BigDecimal.ZERO;
+        BigDecimal taxa = BigDecimal.ZERO;
+        for (PartePagamento parte : novas) {
+            if (parte.getForma() == null || !parte.getForma().parteDeDivisao()) {
+                throw new RegraDeNegocioException("Cada parte da conta é paga em PIX, dinheiro, débito ou crédito.");
+            }
+            if (parte.getValor() == null || parte.getValor().signum() <= 0) {
+                throw new RegraDeNegocioException("Cada parte da conta precisa de um valor maior que zero.");
+            }
+            soma = soma.add(Dinheiro.centavos(parte.getValor()));
+            taxa = taxa.add(parte.getValor().multiply(config.taxaPara(parte.getForma())));
+        }
+        if (soma.compareTo(totalACobrar()) != 0) {
+            throw new RegraDeNegocioException("As partes somam R$ %s, mas o total é R$ %s.".formatted(soma, totalACobrar()));
+        }
+        // Como no pagamento único, a taxa da maquininha é calculada só sobre os itens, não sobre a entrega
+        BigDecimal taxaSobreItens = Dinheiro.centavos(taxa.multiply(valorTotal)
+                .divide(soma.multiply(BigDecimal.valueOf(100)), 8, RoundingMode.HALF_UP));
+        this.partes = new ArrayList<>(novas.stream().map(p -> new PartePagamento(p.getForma(), Dinheiro.centavos(p.getValor()))).toList());
+        this.distribuicao = RateioFinanceiro.calcularComTaxa(valorTotal, cmv(), taxaSobreItens, config);
+    }
+
+    /** Quanto entrou em cada forma: na conta dividida, as partes; senão, o total na forma do pedido. */
+    public Map<FormaPagamento, BigDecimal> recebimentos() {
+        Map<FormaPagamento, BigDecimal> porForma = new EnumMap<>(FormaPagamento.class);
+        if (formaPagamento == FormaPagamento.DIVIDIDO) {
+            partes.forEach(p -> porForma.merge(p.getForma(), p.getValor(), BigDecimal::add));
+        } else if (formaPagamento != null) {
+            porForma.put(formaPagamento, totalACobrar());
+        }
+        return porForma;
+    }
+
+    /** A parte paga em dinheiro (a que pode ter troco); nulo se nada foi em dinheiro. */
+    public BigDecimal emDinheiro() {
+        return recebimentos().get(FormaPagamento.DINHEIRO);
     }
 
     /**
@@ -284,19 +372,22 @@ public class Pedido {
     }
 
     void registrarValorRecebido(BigDecimal recebido) {
-        if (recebido == null || formaPagamento != FormaPagamento.DINHEIRO) {
+        BigDecimal emDinheiro = emDinheiro();
+        if (recebido == null || emDinheiro == null) {
             this.valorRecebido = null;
             return;
         }
-        if (recebido.compareTo(totalACobrar()) < 0) {
-            throw new RegraDeNegocioException("Valor recebido (R$ %s) é menor que o total (R$ %s)."
-                    .formatted(Dinheiro.centavos(recebido), totalACobrar()));
+        if (recebido.compareTo(emDinheiro) < 0) {
+            throw new RegraDeNegocioException("Valor recebido (R$ %s) é menor que o %s (R$ %s)."
+                    .formatted(Dinheiro.centavos(recebido), formaPagamento == FormaPagamento.DIVIDIDO
+                            ? "que é pago em dinheiro" : "total", emDinheiro));
         }
         this.valorRecebido = Dinheiro.centavos(recebido);
     }
 
     public BigDecimal troco() {
-        return valorRecebido == null ? null : valorRecebido.subtract(totalACobrar());
+        BigDecimal emDinheiro = emDinheiro();
+        return valorRecebido == null || emDinheiro == null ? null : valorRecebido.subtract(emDinheiro);
     }
 
     public boolean acertadoComEntregador() {
@@ -474,5 +565,13 @@ public class Pedido {
 
     public List<ItemPedido> getItens() {
         return Collections.unmodifiableList(itens);
+    }
+
+    public BigDecimal getDesconto() {
+        return desconto;
+    }
+
+    public List<PartePagamento> getPartes() {
+        return Collections.unmodifiableList(partes);
     }
 }

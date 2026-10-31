@@ -110,7 +110,9 @@ $('form-login').addEventListener('submit', async (ev) => {
   const form = ev.target;
   const erro = $('login-erro');
   erro.classList.add('hidden');
-  form.querySelector('button').disabled = true;
+  const entrar = form.querySelector('[type=submit]');
+  if (entrar.disabled) return; // Enter repetido enquanto o login anterior ainda está em andamento
+  entrar.disabled = true;
   try {
     const r = await api.post('/auth/login', { username: form.username.value, senha: form.senha.value });
     sessao.set({ token: r.token, nome: r.nome, perfil: r.perfil, username: r.username, expiraEm: r.expiraEm },
@@ -123,8 +125,15 @@ $('form-login').addEventListener('submit', async (ev) => {
     erro.textContent = e.message;
     erro.classList.remove('hidden');
   } finally {
-    form.querySelector('button').disabled = false;
+    entrar.disabled = false;
   }
+});
+// Enter entra mesmo com o foco fora dos campos (ex.: senha preenchida pelo navegador, clique no fundo da tela)
+document.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'Enter' || ev.isComposing || $('tela-login').classList.contains('hidden')) return;
+  if (ev.target.closest?.('#btn-ver-senha, a, [type=submit]')) return;
+  ev.preventDefault();
+  $('form-login').requestSubmit();
 });
 
 // ---------- Mostrar senha só enquanto o botão estiver pressionado ----------

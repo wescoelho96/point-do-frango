@@ -2,7 +2,7 @@
 // No Android depende de um serviço de impressão (app do fabricante ou RawBT).
 // O cupom é montado em #impressao e o @media print esconde o resto da tela.
 import { api } from './api.js';
-import { dataHora, html, moeda, renderizar, rotulo, telefone } from './ui.js';
+import { dataHora, formaDoPedido, html, moeda, renderizar, rotulo, telefone } from './ui.js';
 
 const CHAVE_LARGURA = 'pdf.impressora.largura';
 let loja = null;
@@ -116,9 +116,10 @@ export async function imprimirVenda(p) {
     <hr>
     ${p.itens.map((i) => linha(`${i.quantidade}× ${i.produto}`, i.brinde ? 'brinde' : moeda(i.subtotal)))}
     <hr>
+    ${p.desconto ? html`${linha('Itens', moeda(Number(p.valorTotal) + Number(p.desconto)))}${linha('Desconto', `- ${moeda(p.desconto)}`)}` : ''}
     ${e ? html`${linha('Subtotal', moeda(p.valorTotal))}${linha(`Entrega (${e.bairro})`, e.gratis ? 'GRÁTIS' : moeda(e.taxaCobrada))}` : ''}
     ${linha(e ? 'COBRAR' : 'TOTAL', moeda(total), 'cupom-total')}
-    ${linha('Pagamento', rotulo(p.formaPagamento))}
+    ${linha('Pagamento', formaDoPedido(p))}
     ${p.valorRecebido != null ? html`
       ${linha(e ? 'Troco para' : 'Recebido', moeda(p.valorRecebido))}
       ${linha(e ? 'LEVAR DE TROCO' : 'Troco', moeda(p.troco), e ? 'cupom-total' : '')}` : ''}

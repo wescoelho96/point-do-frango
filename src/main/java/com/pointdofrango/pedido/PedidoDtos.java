@@ -53,7 +53,20 @@ public final class PedidoDtos {
             /* obrigatório na cortesia */
             @Size(max = 150) String motivoCortesia,
             /* lançamento retroativo (só o dono): venda de um dia anterior, já entregue */
-            LocalDateTime realizadoEm) {
+            LocalDateTime realizadoEm,
+            /* desconto em reais sobre os itens (não sobre a entrega) */
+            @DecimalMin("0") @DecimalMax("99999") BigDecimal desconto,
+            /* só com formaPagamento DIVIDIDO: as partes somam o total a cobrar */
+            @Size(max = 10) List<@Valid ParteRequest> pagamentos) {
+
+        public NovoPedidoRequest(CanalVenda canal, FormaPagamento formaPagamento, String clienteNome,
+                                 String clienteTelefone, String enderecoEntrega, String observacao,
+                                 List<ItemRequest> itens, Long comandaId, EntregaRequest entrega, boolean semPromocao,
+                                 BigDecimal valorRecebido, boolean salvarCliente, String motivoCortesia,
+                                 LocalDateTime realizadoEm) {
+            this(canal, formaPagamento, clienteNome, clienteTelefone, enderecoEntrega, observacao, itens, comandaId,
+                    entrega, semPromocao, valorRecebido, salvarCliente, motivoCortesia, realizadoEm, null, null);
+        }
 
         public NovoPedidoRequest(CanalVenda canal, FormaPagamento formaPagamento, String clienteNome,
                                  String clienteTelefone, String enderecoEntrega, String observacao,
@@ -79,6 +92,14 @@ public final class PedidoDtos {
                                  List<ItemRequest> itens) {
             this(canal, formaPagamento, clienteNome, clienteTelefone, enderecoEntrega, observacao, itens, null);
         }
+    }
+
+    /** Uma parte da conta dividida. */
+    public record ParteRequest(@NotNull FormaPagamento forma,
+                               @NotNull @DecimalMin(value = "0", inclusive = false) @DecimalMax("99999") BigDecimal valor) {
+    }
+
+    public record ParteResponse(FormaPagamento forma, BigDecimal valor) {
     }
 
     /** Sem taxa: ela vem do cadastro do bairro. */
@@ -165,7 +186,8 @@ public final class PedidoDtos {
                                  Long comandaId, String comanda, String codigoExterno, BigDecimal taxaPlataforma,
                                  BigDecimal descontoLoja, BigDecimal valorCardapio, List<ItemResponse> itens,
                                  EntregaResponse entrega, BigDecimal totalACobrar, BigDecimal valorRecebido,
-                                 BigDecimal troco, String motivoCortesia) {
+                                 BigDecimal troco, String motivoCortesia, BigDecimal desconto,
+                                 List<ParteResponse> pagamentos) {
 
         public static PedidoResponse de(Pedido p) {
             Comanda c = p.getComanda();
@@ -176,7 +198,9 @@ public final class PedidoDtos {
                     p.getCodigoExterno(), p.getTaxaPlataforma(), p.getDescontoLoja(), p.valorCardapio(),
                     p.getItens().stream().map(i -> new ItemResponse(i.getProdutoId(), i.getNomeProduto(),
                             i.getQuantidade(), i.getPrecoUnitario(), i.subtotal(), i.isBrinde(), i.getPromocao())).toList(),
-                    EntregaResponse.de(p), p.totalACobrar(), p.getValorRecebido(), p.troco(), p.getMotivoCortesia());
+                    EntregaResponse.de(p), p.totalACobrar(), p.getValorRecebido(), p.troco(), p.getMotivoCortesia(),
+                    p.getDesconto(), p.getFormaPagamento() != FormaPagamento.DIVIDIDO ? null
+                            : p.getPartes().stream().map(x -> new ParteResponse(x.getForma(), x.getValor())).toList());
         }
 
         /** Versão para o atendente: sem custos nem potes financeiros. */
@@ -184,7 +208,7 @@ public final class PedidoDtos {
             return new PedidoResponse(id, canal, status, formaPagamento, clienteNome, clienteTelefone,
                     enderecoEntrega, observacao, valorTotal, null, criadoPor, criadoEm, atualizadoEm,
                     motivoCancelamento, comandaId, comanda, codigoExterno, null, null, null, itens,
-                    entrega, totalACobrar, valorRecebido, troco, motivoCortesia);
+                    entrega, totalACobrar, valorRecebido, troco, motivoCortesia, desconto, pagamentos);
         }
 
         /** A cozinha precisa saber o que fazer e se é entrega; o telefone do cliente não. */
@@ -192,7 +216,7 @@ public final class PedidoDtos {
             return new PedidoResponse(id, canal, status, formaPagamento, clienteNome, null,
                     enderecoEntrega, observacao, valorTotal, null, criadoPor, criadoEm, atualizadoEm,
                     motivoCancelamento, comandaId, comanda, codigoExterno, null, null, null, itens,
-                    entrega, totalACobrar, valorRecebido, troco, motivoCortesia);
+                    entrega, totalACobrar, valorRecebido, troco, motivoCortesia, desconto, pagamentos);
         }
     }
 }

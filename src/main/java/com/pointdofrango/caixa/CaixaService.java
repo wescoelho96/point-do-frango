@@ -234,8 +234,11 @@ public class CaixaService {
             if (p.cortesia()) {
                 continue;
             }
-            valores.merge(p.getFormaPagamento(), p.totalACobrar(), BigDecimal::add);
-            quantidades.merge(p.getFormaPagamento(), 1, Integer::sum);
+            // Conta dividida: cada parte entra na sua forma (o dinheiro da gaveta só com a parte em dinheiro)
+            p.recebimentos().forEach((forma, valor) -> {
+                valores.merge(forma, valor, BigDecimal::add);
+                quantidades.merge(forma, 1, Integer::sum);
+            });
             vendas.add(new Venda(p.getCriadoEm(), "Pedido #" + p.getId() + (p.entrega() ? " (entrega)" : ""),
                     p.getFormaPagamento(), p.totalACobrar()));
             if (p.entrega()) {

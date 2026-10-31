@@ -105,10 +105,10 @@ public class RelatorioContadorService {
             meses.add(receita(m.toString(), doMes, categorias, comandas.servicoNoPeriodo(inicio(m.atDay(1)),
                     inicio(m.plusMonths(1).atDay(1)))));
             for (Pedido p : doMes) {
-                if (p.getFormaPagamento() != null) {
-                    formas.merge(p.getFormaPagamento(), p.totalACobrar(), BigDecimal::add);
-                    qtdFormas.merge(p.getFormaPagamento(), 1, Integer::sum);
-                }
+                p.recebimentos().forEach((forma, valor) -> {
+                    formas.merge(forma, valor, BigDecimal::add);
+                    qtdFormas.merge(forma, 1, Integer::sum);
+                });
                 taxas = taxas.add(p.getDistribuicao().taxaPagamento());
             }
             saidas.lancamentos(m).forEach(l -> despesasPorCategoria.computeIfAbsent(l.categoria(), k -> new ArrayList<>()).add(l));
@@ -156,9 +156,7 @@ public class RelatorioContadorService {
             Map<FormaPagamento, BigDecimal> formas = new EnumMap<>(FormaPagamento.class);
             BigDecimal taxas = BigDecimal.ZERO;
             for (Pedido p : e.getValue()) {
-                if (p.getFormaPagamento() != null) {
-                    formas.merge(p.getFormaPagamento(), p.totalACobrar(), BigDecimal::add);
-                }
+                p.recebimentos().forEach((forma, valor) -> formas.merge(forma, valor, BigDecimal::add));
                 taxas = taxas.add(p.getDistribuicao().taxaPagamento());
             }
             return new ReceitaDia(e.getKey(), receita(e.getKey().toString(), e.getValue(), categorias, BigDecimal.ZERO),

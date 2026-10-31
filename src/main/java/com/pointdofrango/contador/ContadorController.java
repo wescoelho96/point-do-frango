@@ -22,6 +22,7 @@ import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /** Relatórios para o contador. As planilhas não levam dados pessoais de cliente (LGPD, minimização). */
@@ -32,7 +33,9 @@ public class ContadorController {
 
     private static final DateTimeFormatter DATA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter HORA = DateTimeFormatter.ofPattern("HH:mm");
-    private static final FormaPagamento[] FORMAS = FormaPagamento.values();
+    // DIVIDIDO não vira coluna: cada parte da conta entra na coluna da sua forma
+    private static final FormaPagamento[] FORMAS = Arrays.stream(FormaPagamento.values())
+            .filter(f -> f != FormaPagamento.DIVIDIDO).toArray(FormaPagamento[]::new);
 
     private final RelatorioContadorService service;
     private final ZoneId zona;
@@ -80,7 +83,7 @@ public class ContadorController {
         for (Pedido p : service.pedidos(de, ate)) {
             LocalDateTime quando = LocalDateTime.ofInstant(p.getCriadoEm(), zona);
             csv.linha(p.getId(), DATA.format(quando), HORA.format(quando), p.getCanal(), p.getStatus(),
-                    p.getFormaPagamento() != null ? p.getFormaPagamento() : "comanda aberta", p.getValorTotal(),
+                    formaParaPlanilha(p), p.getValorTotal(),
                     p.entrega() ? p.taxaCobrada() : BigDecimal.ZERO, p.totalACobrar(), p.getDistribuicao().taxaPagamento(),
                     p.getCodigoExterno(), String.join(", ", p.getItens().stream()
                             .map(i -> i.getQuantidade() + "x " + i.getNomeProduto() + (i.isBrinde() ? " (brinde)" : "")).toList()));
@@ -97,6 +100,17 @@ public class ContadorController {
                 l.descricao(), l.pessoa(), l.fornecedor(), l.forma(), "CAIXA".equals(l.origem()) ? "Gaveta" : "Conta/PIX",
                 l.valor()}).toList());
         return arquivo("saidas", de, ate, csv);
+    }
+
+    /** Conta dividida aparece com as partes, ex.: "PIX 37.50 + DINHEIRO 37.50". */
+    private static Object formaParaPlanilha(Pedido p) {
+        if (p.getFormaPagamento() == null) {
+            return "comanda aberta";
+        }
+        if (p.getFormaPagamento() != FormaPagamento.DIVIDIDO) {
+            return p.getFormaPagamento();
+        }
+        return String.join(" + ", p.getPartes().stream().map(x -> x.getForma() + " " + x.getValor()).toList());
     }
 
     private static ResponseEntity<byte[]> arquivo(String nome, YearMonth de, YearMonth ate, Csv csv) {

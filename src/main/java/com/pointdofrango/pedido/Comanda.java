@@ -118,7 +118,7 @@ public class Comanda {
     void fechar(FormaPagamento forma, boolean cobrar, BigDecimal percentual, BigDecimal recebido,
                 ConfiguracaoFinanceira config, String usuario, Instant agora) {
         garantirAberta();
-        if (forma == null || !forma.movimentaDinheiro()) {
+        if (forma == null || !forma.parteDeDivisao()) {
             throw new RegraDeNegocioException("Informe a forma de pagamento (dinheiro, PIX, débito ou crédito).");
         }
         List<Pedido> validos = pedidosValidos();

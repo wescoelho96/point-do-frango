@@ -1,5 +1,5 @@
 import { api, sessao } from '../api.js';
-import { aoClicar, decimal, hojeISO, hora, html, modal, moeda, numero, renderizar, rotulo, toast, toastErro } from '../ui.js';
+import { aoClicar, decimal, formaDoPedido, hojeISO, hora, html, modal, moeda, numero, renderizar, rotulo, toast, toastErro } from '../ui.js';
 import { blocoPotes } from './potes.js';
 
 const CLASSE_STATUS = { EM_PREPARO: 'badge-warn', PRONTO: 'badge-good', ENTREGUE: '', CANCELADO: 'badge-bad' };
@@ -42,7 +42,7 @@ export async function montar(container, params = {}) {
                 <td>${rotulo(p.canal)}${p.codigoExterno ? html`<div class="muted" style="font-size:.78rem">nº ${p.codigoExterno}</div>` : ''}</td>
                 <td>${p.clienteNome || html`<span class="muted">—</span>`}${p.entrega ? html`<div class="muted" style="font-size:.78rem">🛵 ${p.entrega.bairro}</div>` : ''}</td>
                 <td>${p.itens.map((i) => `${i.quantidade}× ${i.produto}`).join(', ')}</td>
-                <td>${p.formaPagamento ? rotulo(p.formaPagamento) : html`<span class="muted">na comanda</span>`}</td>
+                <td>${p.formaPagamento ? formaDoPedido(p) : html`<span class="muted">na comanda</span>`}${p.desconto ? html`<div class="muted" style="font-size:.78rem">desconto ${moeda(p.desconto)}</div>` : ''}</td>
                 <td class="num right">${moeda(p.valorTotal)}${p.entrega ? html`<div class="muted" style="font-size:.78rem">+ ${moeda(p.entrega.taxa)} entrega</div>` : ''}</td>
                 ${admin ? html`
                   <td class="num right muted">${moeda(p.distribuicao.taxaPagamento)}</td>
