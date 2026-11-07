@@ -16,6 +16,7 @@ const ORDEM_CATEGORIAS = ['PORCAO', 'ESPETINHO', 'COMBO', 'BEBIDA', 'OUTRO'];
 export async function montar(container, params = {}) {
   const estado = {
     produtos: [],
+    busca: '',
     comandas: [],
     bairros: [],
     motoboys: [],
@@ -60,6 +61,26 @@ export async function montar(container, params = {}) {
   }
 
   const produto = (id) => estado.produtos.find((p) => p.id === id);
+  const semAcento = (x) => String(x ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+  // Busca no cardápio: esconde os produtos sem redesenhar, para o teclado do celular não fechar
+  function filtrar() {
+    const termos = semAcento(estado.busca).split(/\s+/).filter(Boolean);
+    let achados = 0;
+    container.querySelectorAll('[data-categoria]').forEach((cat) => {
+      let visiveis = 0;
+      cat.querySelectorAll('[data-nome]').forEach((el) => {
+        const ok = termos.every((t) => el.dataset.nome.includes(t));
+        el.hidden = !ok;
+        if (ok) visiveis++;
+      });
+      cat.hidden = !visiveis;
+      achados += visiveis;
+    });
+    const vazio = container.querySelector('[data-busca-vazia]');
+    if (vazio) vazio.hidden = !termos.length || achados > 0;
+    container.querySelector('[data-acao="limpar-busca"]')?.toggleAttribute('hidden', !estado.busca);
+  }
   const bairro = () => estado.bairros.find((b) => b.id === estado.bairroId);
   const ehEntrega = () => estado.destino === 'DIRETA' && estado.canal !== 'BALCAO' && estado.entrega;
   const totalItens = () => [...estado.itens].reduce((s, [id, q]) => s + produto(id).precoVenda * q, 0);
@@ -281,6 +302,7 @@ export async function montar(container, params = {}) {
       .filter(([, lista]) => lista.length);
 
     const cardapio = porCategoria.length ? porCategoria.map(([, lista]) => html`
+      <div data-categoria>
       <h3 class="categoria-titulo">${lista[0].categoriaRotulo}</h3>
       <div class="produtos">
         ${lista.map((p) => {
@@ -290,7 +312,8 @@ export async function montar(container, params = {}) {
           const aviso = restante <= 0 ? (p.limitadoPor ? `Falta ${p.limitadoPor}` : 'Sem estoque')
             : p.unidadesDisponiveis >= 999 ? '' : `dá para fazer ${restante}`;
           return html`
-            <button class="produto ${noCarrinho ? 'no-carrinho' : ''}" data-acao="add" data-id="${p.id}" ${restante <= 0 ? 'disabled' : ''}
+            <button class="produto ${noCarrinho ? 'no-carrinho' : ''}" data-acao="add" data-id="${p.id}"
+              data-nome="${semAcento(`${p.nome} ${p.categoriaRotulo}`)}" ${restante <= 0 ? 'disabled' : ''}
               ${restante <= 0 && p.limitadoPor ? html`title="Lance a compra ou a contagem de ${p.limitadoPor}"` : ''}>
               ${noCarrinho ? html`<span class="produto-qtd">${noCarrinho}</span>` : ''}
               <strong>${p.nome}</strong>
@@ -298,7 +321,17 @@ export async function montar(container, params = {}) {
               <span class="preco">${moeda(p.precoVenda)}</span>
             </button>`;
         })}
+      </div>
       </div>`) : html`<div class="card empty">Nenhum produto ativo. Cadastre o cardápio primeiro.</div>`;
+
+    const busca = html`
+      <div class="pdv-busca">
+        <span aria-hidden="true">🔍</span>
+        <input type="search" data-campo="busca" value="${estado.busca}" placeholder="Buscar no cardápio (ex.: batata)"
+          aria-label="Buscar no cardápio" autocomplete="off" enterkeyhint="search">
+        <button type="button" class="btn btn-sm" data-acao="limpar-busca" aria-label="Limpar busca" ${estado.busca ? '' : 'hidden'}>✕</button>
+      </div>
+      <div class="card empty" data-busca-vazia hidden>Nenhum item com esse nome.</div>`;
 
     const itens = [...estado.itens].map(([id, q]) => {
       const p = produto(id);
@@ -324,7 +357,8 @@ export async function montar(container, params = {}) {
       ${estado.caixa === null ? html`<div class="card aviso-caixa" style="margin-bottom:12px">💵 O caixa de hoje ainda não foi aberto.
         <a href="#caixa">Abrir caixa</a> para as vendas entrarem no fechamento do dia.</div>` : ''}
       <div class="pdv ${estado.gavetaAberta ? 'gaveta-aberta' : ''}">
-        <section class="pdv-cardapio">${cardapio}</section>
+        <section class="pdv-cardapio">${busca}${cardapio}</section>
+        <button type="button" class="lupa-flutuante so-celular" data-acao="abrir-busca" aria-label="Buscar no cardápio">🔍</button>
         <aside class="card comanda">
           <div class="row comanda-topo">
             <h2>${naComanda && comandaAtual() ? comandaAtual().identificacao : 'Pedido'}</h2>
@@ -382,6 +416,7 @@ export async function montar(container, params = {}) {
   function redesenhar() {
     const dados = lerCampos();
     desenhar();
+    filtrar();
     const f = container.querySelector('#dados-cliente');
     Object.entries(dados).forEach(([k, v]) => { if (f.elements[k] && f.elements[k].type !== 'checkbox') f.elements[k].value = v; });
     atualizarTroco();
@@ -471,6 +506,7 @@ export async function montar(container, params = {}) {
         : `Pedido #${pedido.id} enviado para a cozinha${pedido.comanda ? ` (${pedido.comanda})` : ''}`);
       await carregar(); // atualiza "dá para fazer N" e o consumo da comanda
       estado.enviando = false;
+      estado.busca = ''; // próximo pedido começa com o cardápio inteiro
       desenhar();
     } catch (e) {
       estado.enviando = false;
@@ -522,6 +558,19 @@ export async function montar(container, params = {}) {
     },
     limpar: () => { estado.itens.clear(); redesenhar(); },
     gaveta: () => { estado.gavetaAberta = !estado.gavetaAberta; redesenhar(); },
+    'abrir-busca': () => {
+      const campo = container.querySelector('[data-campo="busca"]');
+      campo.scrollIntoView({ block: 'center' });
+      campo.focus();
+      campo.select();
+    },
+    'limpar-busca': () => {
+      estado.busca = '';
+      const campo = container.querySelector('[data-campo="busca"]');
+      campo.value = '';
+      filtrar();
+      campo.focus();
+    },
     'imprimir-ultimo': () => imprimirVenda(estado.ultimo).catch(toastErro),
     'receber-comanda': async () => {
       try {
@@ -552,6 +601,11 @@ export async function montar(container, params = {}) {
   // Digitar atualiza totais e a conferência das partes sem redesenhar (o cursor continua no campo)
   const aoDigitar = (ev) => {
     const alvo = ev.target;
+    if (alvo.dataset.campo === 'busca') {
+      estado.busca = alvo.value;
+      filtrar();
+      return;
+    }
     if (alvo.dataset.campo === 'desconto') {
       estado.desconto = alvo.value;
       container.querySelectorAll('[data-total]').forEach((el) => { el.textContent = moeda(total()); });
@@ -576,6 +630,16 @@ export async function montar(container, params = {}) {
   // Enter num campo não pode "enviar" o formulário (recarregaria a página)
   const semSubmit = (ev) => ev.preventDefault();
   container.addEventListener('submit', semSubmit);
+  // Na busca: Enter com um só resultado já adiciona; Esc limpa
+  const teclaBusca = (ev) => {
+    if (ev.target.dataset?.campo !== 'busca') return;
+    if (ev.key === 'Escape') container.querySelector('[data-acao="limpar-busca"]')?.click();
+    if (ev.key !== 'Enter') return;
+    ev.preventDefault();
+    const visiveis = [...container.querySelectorAll('[data-nome]:not([hidden]):not([disabled])')];
+    if (visiveis.length === 1) visiveis[0].click();
+  };
+  container.addEventListener('keydown', teclaBusca);
 
   await carregar();
   estado.gratis = gratisHoje();
@@ -585,5 +649,6 @@ export async function montar(container, params = {}) {
     container.removeEventListener('change', aoMudarCampo);
     container.removeEventListener('input', aoDigitar);
     container.removeEventListener('submit', semSubmit);
+    container.removeEventListener('keydown', teclaBusca);
   };
 }
