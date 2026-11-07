@@ -1,5 +1,5 @@
 # Etapa 1: build (Maven + JDK, presentes apenas na imagem intermediária)
-FROM maven:3.9.9-eclipse-temurin-17 AS build
+FROM maven:3.9-eclipse-temurin-26 AS build
 WORKDIR /app
 # Dependências em camada própria: o cache só é invalidado quando o pom.xml muda
 COPY pom.xml .
