@@ -8,7 +8,7 @@ COPY src ./src
 RUN mvn -q -B package -DskipTests
 
 # Etapa 2: runtime (apenas JRE + .jar, resultando em uma imagem menor)
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:24-jre-alpine
 WORKDIR /app
 # Executa com usuário sem privilégios (não root)
 RUN addgroup -S app && adduser -S app -G app
