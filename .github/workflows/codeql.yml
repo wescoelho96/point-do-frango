@@ -18,7 +18,7 @@ jobs:
       matrix:
         linguagem: [java-kotlin, javascript-typescript]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-java@v4
         if: matrix.linguagem == 'java-kotlin'
         with:
