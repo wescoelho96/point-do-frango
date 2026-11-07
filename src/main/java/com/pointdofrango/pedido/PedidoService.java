@@ -64,11 +64,13 @@ public class PedidoService {
     private final ApplicationEventPublisher eventos;
     private final Clock clock;
     private final ZoneId zona;
+    private final ContasPrimeiro contasPrimeiro;
 
     public PedidoService(PedidoRepository pedidos, ProdutoService produtoService, EstoqueService estoqueService,
                          ConfiguracaoFinanceiraService configuracaoService, ComandaRepository comandas,
                          EntregaCadastroService cadastros, ClienteService clientes, PromocaoService promocoes,
-                         ApplicationEventPublisher eventos, Clock clock, ZoneId zona) {
+                         ApplicationEventPublisher eventos, Clock clock, ZoneId zona,
+                          ContasPrimeiro contasPrimeiro) {
         this.promocoes = promocoes;
         this.pedidos = pedidos;
         this.comandas = comandas;
@@ -80,6 +82,7 @@ public class PedidoService {
         this.configuracaoService = configuracaoService;
         this.clock = clock;
         this.zona = zona;
+        this.contasPrimeiro = contasPrimeiro;
     }
 
     @Transactional
@@ -258,6 +261,7 @@ public class PedidoService {
 
         // Salva antes da baixa: o extrato do estoque referencia o id do pedido
         pedidos.save(pedido);
+        contasPrimeiro.aplicar(List.of(pedido));
         estoqueService.baixarParaPedido(insumos, consumoTotal, pedido.getId(), usuario, jaSaiu);
 
         log.info("Pedido #{} lançado ({}, {}) total={} por {}", pedido.getId(), pedido.getCanal(),
@@ -293,8 +297,9 @@ public class PedidoService {
     }
 
     private Entrega validarEntrega(NovoPedidoRequest req, Comanda comanda, String telefone, boolean retroativo) {
-        if (comanda != null || (req.canal() != CanalVenda.WHATSAPP && req.canal() != CanalVenda.TELEFONE)) {
-            throw new RegraDeNegocioException("Entrega só vale para pedidos de WhatsApp ou telefone.");
+        if (comanda != null || (req.canal() != CanalVenda.WHATSAPP && req.canal() != CanalVenda.TELEFONE
+                && req.canal() != CanalVenda.SITE)) {
+            throw new RegraDeNegocioException("Entrega só vale para pedidos de WhatsApp, telefone ou do site.");
         }
         // Na comanda de papel o telefone nem sempre foi anotado; no pedido do dia ele é obrigatório.
         if (limpar(req.clienteNome()) == null || (telefone == null && !retroativo) || limpar(req.enderecoEntrega()) == null) {

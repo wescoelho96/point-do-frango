@@ -52,6 +52,10 @@ public interface PedidoRepository extends JpaRepository<Pedido, Long> {
             + "and p.criadoEm >= :inicio and p.criadoEm < :fim")
     BigDecimal faturamentoEntre(Instant inicio, Instant fim);
 
+    @Query("select coalesce(sum(p.distribuicao.contasFixas), 0) from Pedido p "
+            + "where p.status <> com.pointdofrango.pedido.StatusPedido.CANCELADO and p.criadoEm >= :inicio and p.criadoEm < :fim")
+    BigDecimal contasGuardadasEntre(Instant inicio, Instant fim);
+
     /** O que os clientes pagaram de taxa (entrega grátis entra como zero). */
     @Query("select coalesce(sum(coalesce(p.taxaCobrada, p.taxaEntrega)), 0) from Pedido p where p.status <> com.pointdofrango.pedido.StatusPedido.CANCELADO "
             + "and p.criadoEm >= :inicio and p.criadoEm < :fim")

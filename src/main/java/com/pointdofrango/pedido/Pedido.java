@@ -188,6 +188,25 @@ public class Pedido {
         this.atualizadoEm = agora;
     }
 
+    /** Contas primeiro: parte da sobra desta venda vai para as contas fixas do mês. */
+    void reservarParaContas(BigDecimal valor, BigDecimal percentualProLabore) {
+        if (valor.signum() > 0) {
+            this.distribuicao = distribuicao.comContas(valor, percentualProLabore);
+        }
+    }
+
+    /** O que esta venda deixa depois da taxa e da reposição (e do que já foi para as contas). */
+    BigDecimal sobraLivre() {
+        return distribuicao == null ? BigDecimal.ZERO : distribuicao.lucroLiquido().max(BigDecimal.ZERO);
+    }
+
+    /** Pedido de comanda dividida: recebe a sua fatia de cada forma. */
+    void definirPagamentoDividido(List<PartePagamento> novas, ConfiguracaoFinanceira config, Instant agora) {
+        this.formaPagamento = FormaPagamento.DIVIDIDO;
+        dividirPagamento(novas, config);
+        this.atualizadoEm = agora;
+    }
+
     public boolean cancelado() {
         return status == StatusPedido.CANCELADO;
     }

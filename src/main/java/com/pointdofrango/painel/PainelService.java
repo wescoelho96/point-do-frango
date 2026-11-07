@@ -1,6 +1,7 @@
 package com.pointdofrango.painel;
 
 import com.pointdofrango.estoque.EstoqueService;
+import com.pointdofrango.financeiro.ConfiguracaoFinanceira;
 import com.pointdofrango.financeiro.ConfiguracaoFinanceiraService;
 import com.pointdofrango.financeiro.DistribuicaoFinanceira;
 import com.pointdofrango.painel.PainelDtos.AlertaEstoque;
@@ -158,8 +159,17 @@ public class PainelService {
         BigDecimal sugerido = faturamento30d.signum() == 0 ? null
                 : totalContas.multiply(CEM).divide(faturamento30d, 1, RoundingMode.HALF_UP);
 
+        ConfiguracaoFinanceira config = financeiro.obter();
+        boolean contasPrimeiro = config.isContasPrimeiro();
+        int dias = config.diasDeTrabalho(mes);
+        BigDecimal cota = dias == 0 ? totalContas
+                : totalContas.divide(BigDecimal.valueOf(dias), 2, RoundingMode.HALF_UP);
+        LocalDate hoje = LocalDate.now(clock.withZone(zona));
+        // mês passado: tudo devido; mês futuro: nada
+        BigDecimal devido = mes.equals(YearMonth.from(hoje)) ? config.contasAte(totalContas, hoje)
+                : mes.isBefore(YearMonth.from(hoje)) ? totalContas : BigDecimal.ZERO;
         return new ContasDoMes(mes, totalContas, separado, falta, coberto,
-                financeiro.obter().getPercentualContasFixas(), sugerido);
+                config.getPercentualContasFixas(), contasPrimeiro ? null : sugerido, contasPrimeiro, dias, cota, devido);
     }
 
     private List<AlertaEstoque> alertasEstoque() {

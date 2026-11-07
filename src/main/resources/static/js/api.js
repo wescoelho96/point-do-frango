@@ -15,6 +15,16 @@ export const sessao = {
     this.limpar();
     try { (lembrar ? localStorage : sessionStorage).setItem(CHAVE_SESSAO, JSON.stringify(dados)); } catch { /* modo privado */ }
   },
+  /** Atualiza campos da sessão no mesmo armazenamento em que ela está. */
+  atualizar(campos) {
+    for (const storage of [sessionStorage, localStorage]) {
+      const atual = ler(storage);
+      if (atual) {
+        try { storage.setItem(CHAVE_SESSAO, JSON.stringify({ ...atual, ...campos })); } catch { /* modo privado */ }
+        return;
+      }
+    }
+  },
   limpar() {
     try { sessionStorage.removeItem(CHAVE_SESSAO); localStorage.removeItem(CHAVE_SESSAO); } catch { /* ignore */ }
   },

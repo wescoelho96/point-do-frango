@@ -228,7 +228,11 @@ public class CaixaService {
                 continue; // pedido de comanda entra quando a comanda é paga
             }
             if (p.getCanal().plataforma()) {
+                // O app paga depois: aparece na lista, mas fora dos recebimentos e da gaveta
                 apps = apps.add(p.getValorTotal());
+                vendas.add(new Venda(p.getCriadoEm(), p.getCanal().getGrupo().getRotulo()
+                        + (p.getCodigoExterno() != null ? " nº " + p.getCodigoExterno() : " (pedido #" + p.getId() + ")"),
+                        p.getFormaPagamento(), p.getValorTotal()));
                 continue;
             }
             if (p.cortesia()) {
@@ -247,8 +251,10 @@ public class CaixaService {
         }
         for (Comanda c : comandas.encerradasNoPeriodo(inicio, fim)) {
             if (c.getStatus() == StatusComanda.FECHADA) {
-                valores.merge(c.getFormaPagamento(), c.getValorTotal(), BigDecimal::add);
-                quantidades.merge(c.getFormaPagamento(), 1, Integer::sum);
+                c.recebimentos().forEach((forma, valor) -> {
+                    valores.merge(forma, valor, BigDecimal::add);
+                    quantidades.merge(forma, 1, Integer::sum);
+                });
                 vendas.add(new Venda(c.getFechadaEm(), "Comanda " + c.getIdentificacao(), c.getFormaPagamento(),
                         c.getValorTotal()));
             }

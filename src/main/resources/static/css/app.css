@@ -166,6 +166,9 @@ td.acoes .btn { margin: 2px 0; }
 .btn-block { width: 100%; padding: 12px; font-size: 1rem; }
 .btn-icon { width: 32px; height: 32px; padding: 0; display: inline-grid; place-items: center; }
 
+/* hidden sempre esconde, mesmo em elementos com display próprio (flex, grid) */
+[hidden] { display: none !important; }
+
 label.field { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; color: var(--text-2); }
 input, select, textarea { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; width: 100%; }
 input:focus, select:focus, textarea:focus, .btn:focus-visible, .nav-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }

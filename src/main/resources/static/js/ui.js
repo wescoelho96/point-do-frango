@@ -97,7 +97,7 @@ export function somarDias(isoDate, dias) {
 }
 
 export const ROTULOS = {
-  BALCAO: 'Balcão', MESA: 'Mesa', WHATSAPP: 'WhatsApp', TELEFONE: 'Telefone', IFOOD: 'iFood', NOVENTA_NOVE_FOOD: '99Food',
+  BALCAO: 'Balcão', MESA: 'Mesa', WHATSAPP: 'WhatsApp', TELEFONE: 'Telefone', SITE: 'Site', IFOOD: 'iFood', NOVENTA_NOVE_FOOD: '99Food',
   DINHEIRO: 'Dinheiro', PIX: 'PIX', DEBITO: 'Débito', CREDITO: 'Crédito', A_RECEBER: 'A receber (comanda aberta)', PAGO_NO_APP: 'Pago no app', DIVIDIDO: 'Dividido',
   EM_PREPARO: 'Em preparo', PRONTO: 'Pronto', ENTREGUE: 'Entregue', CANCELADO: 'Cancelado',
   ENTRADA: 'Entrada', SAIDA_VENDA: 'Venda', ESTORNO_VENDA: 'Estorno', AJUSTE: 'Ajuste',

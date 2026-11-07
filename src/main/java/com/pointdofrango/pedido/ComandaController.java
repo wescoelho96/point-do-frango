@@ -76,7 +76,9 @@ public class ComandaController {
     @PostMapping("/{id}/fechar")
     @Operation(summary = "Fecha a conta: forma de pagamento e se cobra (ou não) a taxa de serviço")
     public ComandaResponse fechar(@PathVariable Long id, @Valid @RequestBody FecharRequest req, Authentication auth) {
-        service.fechar(id, req.formaPagamento(), req.cobrarServico(), req.valorRecebido(), auth.getName());
+        service.fechar(id, req.formaPagamento(), req.cobrarServico(), req.valorRecebido(), req.pagamentos() == null
+                ? List.of() : req.pagamentos().stream().map(p -> new PartePagamento(p.forma(), p.valor())).toList(),
+                auth.getName());
         return ComandaResponse.de(service.buscar(id), percentual());
     }
 

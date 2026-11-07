@@ -37,6 +37,12 @@ public class ConfiguracaoFinanceiraService {
         ConfiguracaoFinanceira config = obter();
         config.atualizar(req.percentualContasFixas(), req.percentualProLabore(), req.taxaPix(), req.taxaDebito(),
                 req.taxaCredito(), Instant.now(clock));
+        if (req.contasPrimeiro() != null) {
+            config.definirContasPrimeiro(req.contasPrimeiro());
+        }
+        if (req.diasTrabalho() != null) {
+            config.definirDiasTrabalho(req.diasTrabalho());
+        }
         if (req.taxaIfood() != null && req.taxaNoventaNove() != null) {
             config.atualizarTaxasPlataformas(req.taxaIfood(), req.taxaNoventaNove());
         }

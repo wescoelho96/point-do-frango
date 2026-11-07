@@ -9,7 +9,9 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.Instant;
+import java.util.Set;
 
 public final class FinanceiroDtos {
 
@@ -23,7 +25,17 @@ public final class FinanceiroDtos {
             @NotNull @DecimalMin("0") @DecimalMax("100") BigDecimal taxaDebito,
             @NotNull @DecimalMin("0") @DecimalMax("100") BigDecimal taxaCredito,
             @DecimalMin("0") @DecimalMax("100") BigDecimal taxaIfood,
-            @DecimalMin("0") @DecimalMax("100") BigDecimal taxaNoventaNove) {
+            @DecimalMin("0") @DecimalMax("100") BigDecimal taxaNoventaNove,
+            /* nulos mantêm como está */
+            Boolean contasPrimeiro,
+            Set<DayOfWeek> diasTrabalho) {
+
+        public ConfiguracaoRequest(BigDecimal percentualContasFixas, BigDecimal percentualProLabore, BigDecimal taxaPix,
+                                   BigDecimal taxaDebito, BigDecimal taxaCredito, BigDecimal taxaIfood,
+                                   BigDecimal taxaNoventaNove, Boolean contasPrimeiro) {
+            this(percentualContasFixas, percentualProLabore, taxaPix, taxaDebito, taxaCredito, taxaIfood,
+                    taxaNoventaNove, contasPrimeiro, null);
+        }
     }
 
     public record RegimeRequest(@NotNull RegimeTributario regime,
@@ -34,13 +46,14 @@ public final class FinanceiroDtos {
                                        BigDecimal percentualReserva, BigDecimal taxaPix, BigDecimal taxaDebito,
                                        BigDecimal taxaCredito, BigDecimal taxaIfood, BigDecimal taxaNoventaNove,
                                        Instant atualizadoEm, RegimeTributario regimeTributario,
-                                       BigDecimal limiteFaturamentoAnual) {
+                                       BigDecimal limiteFaturamentoAnual, boolean contasPrimeiro,
+                                       Set<DayOfWeek> diasTrabalho) {
 
         public static ConfiguracaoResponse de(ConfiguracaoFinanceira c) {
             return new ConfiguracaoResponse(c.getPercentualContasFixas(), c.getPercentualProLabore(),
                     c.getPercentualReserva(), c.getTaxaPix(), c.getTaxaDebito(), c.getTaxaCredito(),
                     c.getTaxaIfood(), c.getTaxaNoventaNove(), c.getAtualizadoEm(), c.getRegimeTributario(),
-                    c.getLimiteFaturamentoAnual());
+                    c.getLimiteFaturamentoAnual(), c.isContasPrimeiro(), c.getDiasTrabalho());
         }
     }
 

@@ -10,7 +10,15 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.DayOfWeek;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Percentuais do rateio e taxas de pagamento, em linha única (id = 1). Valores em pontos percentuais (20.00 = 20%).
@@ -59,6 +67,16 @@ public class ConfiguracaoFinanceira {
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal limiteFaturamentoAnual = new BigDecimal("81000.00");
 
+    /**
+     * Contas primeiro: a sobra de cada venda (depois da taxa e da reposição) vai toda para as contas fixas
+     * até o mês estar pago; só então vira lucro. Desligado, cada venda guarda percentualContasFixas.
+     */
+    @Column(nullable = false)
+    private boolean contasPrimeiro;
+
+    /** Dias da semana em que a loja abre (MONDAY,TUESDAY...); nulo = todos. Divide as contas em cota diária. */
+    private String diasTrabalho;
+
     protected ConfiguracaoFinanceira() {
     }
 
@@ -92,6 +110,59 @@ public class ConfiguracaoFinanceira {
             case CORTESIA -> BigDecimal.ZERO;
             case DIVIDIDO -> BigDecimal.ZERO; // a taxa é a soma das partes (Pedido.taxaDasPartes)
         };
+    }
+
+    public void definirContasPrimeiro(boolean contasPrimeiro) {
+        this.contasPrimeiro = contasPrimeiro;
+    }
+
+    public boolean isContasPrimeiro() {
+        return contasPrimeiro;
+    }
+
+    public void definirDiasTrabalho(Set<DayOfWeek> dias) {
+        if (dias.isEmpty()) {
+            throw new RegraDeNegocioException("Marque ao menos um dia de trabalho.");
+        }
+        this.diasTrabalho = dias.size() == 7 ? null
+                : dias.stream().sorted().map(DayOfWeek::name).collect(Collectors.joining(","));
+    }
+
+    public Set<DayOfWeek> getDiasTrabalho() {
+        if (diasTrabalho == null || diasTrabalho.isBlank()) {
+            return EnumSet.allOf(DayOfWeek.class);
+        }
+        return Arrays.stream(diasTrabalho.split(",")).map(DayOfWeek::valueOf)
+                .collect(Collectors.toCollection(() -> EnumSet.noneOf(DayOfWeek.class)));
+    }
+
+    /** Dias de trabalho do mês, pelos dias da semana configurados. */
+    public int diasDeTrabalho(YearMonth mes) {
+        return diasDeTrabalhoEntre(mes.atDay(1), mes.plusMonths(1).atDay(1));
+    }
+
+    /**
+     * Quanto das contas do mês já devia estar guardado ao fim do dia: uma cota por dia trabalhado.
+     * O dia de hoje conta mesmo fora da escala (abriu, trabalhou); o último dia de trabalho fecha o total.
+     */
+    public BigDecimal contasAte(BigDecimal contasDoMes, LocalDate dia) {
+        int total = diasDeTrabalho(YearMonth.from(dia));
+        int ate = Math.min(diasDeTrabalhoEntre(dia.withDayOfMonth(1), dia) + 1, total);
+        if (total == 0 || ate >= total) {
+            return contasDoMes;
+        }
+        return contasDoMes.multiply(BigDecimal.valueOf(ate)).divide(BigDecimal.valueOf(total), 2, RoundingMode.HALF_UP);
+    }
+
+    private int diasDeTrabalhoEntre(LocalDate inicio, LocalDate fimExclusivo) {
+        Set<DayOfWeek> dias = getDiasTrabalho();
+        int n = 0;
+        for (LocalDate d = inicio; d.isBefore(fimExclusivo); d = d.plusDays(1)) {
+            if (dias.contains(d.getDayOfWeek())) {
+                n++;
+            }
+        }
+        return n;
     }
 
     public void atualizarTaxasPlataformas(BigDecimal ifood, BigDecimal noventaNove) {

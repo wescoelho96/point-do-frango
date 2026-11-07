@@ -1,6 +1,7 @@
 package com.pointdofrango.config;
 
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
+import com.pointdofrango.usuario.SessaoValida;
 import com.pointdofrango.usuario.TokenService;
 import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
@@ -14,6 +15,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
@@ -25,6 +27,7 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtGra
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.header.writers.CrossOriginOpenerPolicyHeaderWriter;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy;
 
 import javax.crypto.SecretKey;
@@ -79,7 +82,13 @@ public class SecurityConfig {
                                 "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
                                         + "img-src 'self' data:; object-src 'none'; base-uri 'self'; "
                                         + "frame-ancestors 'none'; form-action 'self'"))
-                        .referrerPolicy(r -> r.policy(ReferrerPolicy.NO_REFERRER)))
+                        .referrerPolicy(r -> r.policy(ReferrerPolicy.NO_REFERRER))
+                        // HTTPS obrigatório por 1 ano (só sai em requisição segura: ver forward-headers-strategy)
+                        .httpStrictTransportSecurity(hsts -> hsts.includeSubDomains(true).maxAgeInSeconds(31536000))
+                        .permissionsPolicyHeader(pp -> pp.policy(
+                                "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"))
+                        .crossOriginOpenerPolicy(c -> c.policy(
+                                CrossOriginOpenerPolicyHeaderWriter.CrossOriginOpenerPolicy.SAME_ORIGIN)))
                 .authorizeHttpRequests(a -> a
                         // SSE: ao terminar, a conexão faz um "dispatch" ASYNC interno que não traz o token de novo
                         .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
@@ -90,6 +99,10 @@ public class SecurityConfig {
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
+                        // Cardápio online do cliente (link do WhatsApp)
+                        .requestMatchers("/pedir", "/pedido.html").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/publico/cardapio").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/publico/pedidos").permitAll()
 
                         // Qualquer usuário logado
                         .requestMatchers("/api/v1/usuarios/me", "/api/v1/usuarios/me/**", "/api/v1/eventos").authenticated()
@@ -160,10 +173,12 @@ public class SecurityConfig {
         return new NimbusJwtEncoder(new ImmutableSecret<>(chave));
     }
 
+    /** Além de assinatura, emissor e validade, confere se o login ainda está ativo e igual (SessaoValida). */
     @Bean
-    JwtDecoder jwtDecoder(SecretKey chave) {
+    JwtDecoder jwtDecoder(SecretKey chave, SessaoValida sessaoValida) {
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(chave).macAlgorithm(MacAlgorithm.HS256).build();
-        decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(TokenService.EMISSOR));
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
+                JwtValidators.createDefaultWithIssuer(TokenService.EMISSOR), sessaoValida));
         return decoder;
     }
 }

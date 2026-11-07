@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#c2410c">
+  <meta name="description" content="Peça no Point do Frango: escolha os itens, veja a taxa de entrega do seu bairro e mande o pedido direto para a cozinha.">
+  <link rel="icon" href="/icons/favicon-64.png" type="image/png">
+  <title>Fazer pedido · Point do Frango</title>
+  <link rel="stylesheet" href="/css/pedido.css">
+</head>
+<body>
+  <header class="topo">
+    <img src="/img/logo.jpg" alt="" class="logo">
+    <div>
+      <h1 id="loja">Point do Frango</h1>
+      <p id="situacao" class="situacao">Carregando o cardápio…</p>
+    </div>
+  </header>
+
+  <main id="conteudo">
+    <section id="cardapio" aria-label="Cardápio"></section>
+
+    <form id="checkout" class="hidden" novalidate>
+      <button type="button" class="voltar" data-voltar>← Voltar ao cardápio</button>
+      <h2>Seu pedido</h2>
+      <div id="resumo-itens" class="caixa"></div>
+
+      <h2>Como quer receber?</h2>
+      <div class="opcoes" role="radiogroup">
+        <label class="opcao"><input type="radio" name="receber" value="entrega" checked> 🛵 Entrega</label>
+        <label class="opcao"><input type="radio" name="receber" value="retirada"> 🏪 Retirar na loja</label>
+      </div>
+      <div id="campos-entrega">
+        <label>Bairro<select name="bairroId" required></select></label>
+        <label>Endereço (rua, número, complemento)<input name="endereco" maxlength="255" autocomplete="street-address" required></label>
+        <label>Ponto de referência (opcional)<input name="referencia" maxlength="150"></label>
+      </div>
+      <p id="endereco-loja" class="dica hidden"></p>
+
+      <h2>Seus dados</h2>
+      <label>Nome<input name="nome" maxlength="100" autocomplete="name" required></label>
+      <label>Telefone com DDD (WhatsApp)<input name="telefone" maxlength="30" inputmode="tel" autocomplete="tel" placeholder="(11) 98765-4321" required></label>
+
+      <h2>Pagamento</h2>
+      <p class="dica">Você paga na entrega ou na retirada.</p>
+      <div class="opcoes">
+        <label class="opcao"><input type="radio" name="formaPagamento" value="PIX" checked> PIX</label>
+        <label class="opcao"><input type="radio" name="formaPagamento" value="DINHEIRO"> Dinheiro</label>
+        <label class="opcao"><input type="radio" name="formaPagamento" value="DEBITO"> Débito</label>
+        <label class="opcao"><input type="radio" name="formaPagamento" value="CREDITO"> Crédito</label>
+      </div>
+      <label id="campo-troco" class="hidden">Troco para quanto? (deixe vazio se não precisar)<input name="trocoPara" inputmode="decimal" placeholder="Ex.: 100"></label>
+
+      <label>Observação (opcional)<textarea name="observacao" maxlength="255" rows="2" placeholder="Ex.: sem cebola, molho à parte"></textarea></label>
+      <!-- campo escondido: pessoas não veem, robôs preenchem -->
+      <label class="escondido" aria-hidden="true">Site<input name="site" tabindex="-1" autocomplete="off"></label>
+      <label class="consentimento"><input type="checkbox" name="salvarDados">
+        <span>Guardar meus dados para o próximo pedido (<a href="/privacidade.html" target="_blank" rel="noopener">privacidade</a>)</span></label>
+
+      <div id="totais" class="caixa"></div>
+      <p id="erro" class="erro hidden" role="alert"></p>
+      <button type="submit" class="botao-principal">Enviar pedido</button>
+    </form>
+
+    <section id="confirmacao" class="hidden" aria-live="polite"></section>
+  </main>
+
+  <div id="barra" class="barra hidden">
+    <div><span id="barra-qtd"></span><strong id="barra-total"></strong></div>
+    <button type="button" class="botao-principal" data-continuar>Continuar</button>
+  </div>
+
+  <script type="module" src="/js/pedido-online.js"></script>
+</body>
+</html>

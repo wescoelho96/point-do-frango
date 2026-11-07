@@ -1,5 +1,5 @@
 import { api, sessao } from '../api.js';
-import { aoClicar, dataHora, decimal, hora, html, modal, moeda, renderizar, rotulo, toast, toastErro } from '../ui.js';
+import { aoClicar, dataHora, decimal, hojeISO, hora, html, modal, moeda, pct, renderizar, rotulo, toast, toastErro } from '../ui.js';
 
 const CATEGORIAS_SAIDA = ['INSUMOS', 'FUNCIONARIO', 'PRO_LABORE', 'EQUIPAMENTO', 'SANGRIA', 'OUTRO'];
 const FORMAS_SAIDA = ['DINHEIRO', 'PIX'];
@@ -14,12 +14,43 @@ export async function montar(container) {
   let colaboradores = [];
   let historico = [];
   let fornecedores = [];
+  let hoje = null;
 
   async function carregar() {
-    [caixa, colaboradores, historico, fornecedores] = await Promise.all([
+    const dia = hojeISO();
+    [caixa, colaboradores, historico, fornecedores, hoje] = await Promise.all([
       api.get('/caixa/atual'), api.get('/colaboradores'), admin ? api.get('/caixa/historico') : [], api.get('/fornecedores'),
+      admin ? api.get(`/painel/resumo?inicio=${dia}&fim=${dia}`) : null,
     ]);
     desenhar();
+  }
+
+  // Quanto do que entrou hoje vai para cada pote: o dono transfere ou separa no fim do dia
+  function separacaoDoDia(r) {
+    const bruto = Number(r.faturamentoBruto);
+    if (!bruto) return '';
+    const p = r.potesFinais;
+    // diárias e motoboy pagos hoje, menos as taxas de entrega que os clientes pagaram
+    const equipe = Number(r.equipeEEntregas.descontadoDoLucro);
+    const linhas = [
+      ['🧺 Repor estoque', p.reposicaoEstoque, 'compra de insumos'],
+      ['🏠 Contas da loja', p.contasFixas, `cota do dia: ${moeda(r.contasDoMes.cotaDiaria)}`],
+      ...(equipe > 0.004 ? [['👷 Equipe e motoboy', equipe, 'já pago pelo caixa']] : []),
+      ['💳 Taxas', p.taxaPagamento, 'a maquininha e os apps já descontam'],
+      ['🙋 Seu pró-labore', p.proLabore, 'pode transferir para a sua conta'],
+      ['🛟 Reserva', p.reservaEmergencia, 'fica na conta da loja'],
+    ];
+    return html`
+      <div class="card" style="margin-top:16px">
+        <h2>Separe o dinheiro de hoje</h2>
+        <p class="text-2" style="margin:4px 0 8px">Das vendas de hoje (<strong>${moeda(bruto)}</strong>), separe assim:</p>
+        <table><tbody>${linhas.map(([nome, valor, dica]) => html`
+          <tr><td>${nome}<div class="muted" style="font-size:.78rem">${dica}</div></td>
+            <td class="num right"><strong>${moeda(valor)}</strong></td>
+            <td class="num right muted">${pct((Number(valor) / bruto) * 100)}</td></tr>`)}</tbody></table>
+        ${Number(p.lucroLiquido) < 0 ? html`<p class="bad" style="margin:8px 0 0">Hoje as vendas ainda não cobriram a cota das contas:
+          faltam ${moeda(-p.lucroLiquido)}, que passam para os próximos dias.</p>` : ''}
+      </div>`;
   }
 
   const corDiferenca = (v) => (Number(v) < -0.004 ? 'bad' : Number(v) > 0.004 ? 'good' : '');
@@ -51,6 +82,7 @@ export async function montar(container) {
   }
 
   function resumoAdmin(c) {
+    const apps = c.vendas.filter((v) => v.forma === 'PAGO_NO_APP');
     const saidas = Number(c.saidasDinheiro) + Number(c.saidasOutras);
     return html`
       <div class="stat-row">
@@ -65,16 +97,18 @@ export async function montar(container) {
         <div class="card stat"><div class="rotulo">Dinheiro na gaveta (esperado)</div><div class="valor num">${moeda(c.dinheiroEsperado)}</div>
           <div class="sub">troco + vendas em dinheiro${Number(c.suprimentos) ? ' + suprimentos' : ''} − saídas em dinheiro</div></div>
       </div>
-      ${Number(c.vendasApps) ? html`<p class="muted" style="font-size:.85rem">iFood/99Food no período: ${moeda(c.vendasApps)} (o app paga depois, não entra na gaveta).</p>` : ''}
-      <h2 style="margin-top:20px">Recebimentos <span class="badge">${c.vendas.length}</span></h2>
+      ${apps.length ? html`<p class="muted" style="font-size:.85rem">iFood/99Food no período: ${apps.length} pedido(s), ${moeda(c.vendasApps)}
+        (o app paga depois, não entra na gaveta nem no recebido).</p>` : ''}
+      <h2 style="margin-top:20px">Vendas <span class="badge">${c.vendas.length}</span></h2>
       ${new Date(c.vendasDesde) < new Date(c.abertoEm) ? html`<p class="muted" style="margin:0 0 8px;font-size:.85rem">
         Inclui o que foi recebido desde ${hora(c.vendasDesde)}, antes de o caixa ser aberto.</p>` : ''}
       <div class="card table-wrap">${c.vendas.length ? html`<table>
         <thead><tr><th>Hora</th><th>Venda</th><th>Forma</th><th class="right">Valor</th></tr></thead>
         <tbody>${c.vendas.map((v) => html`
           <tr><td class="num">${hora(v.quando)}</td><td>${v.descricao}</td><td>${rotulo(v.forma)}</td>
-            <td class="num right good">+${moeda(v.valor)}</td></tr>`)}</tbody></table>`
-        : html`<div class="empty">Nenhuma venda recebida ainda.</div>`}</div>`;
+            <td class="num right ${v.forma === 'PAGO_NO_APP' ? 'muted' : 'good'}">+${moeda(v.valor)}</td></tr>`)}</tbody></table>`
+        : html`<div class="empty">Nenhuma venda recebida ainda.</div>`}</div>
+      ${hoje ? separacaoDoDia(hoje) : ''}`;
   }
 
   function telaAberto(c) {

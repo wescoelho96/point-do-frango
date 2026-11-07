@@ -1,11 +1,12 @@
 import { api, sessao } from '../api.js';
-import { aoClicar, dataHora, decimal, hojeISO, hora, html, modal, moeda, renderizar, rotulo, somarDias, toast, toastErro } from '../ui.js';
+import { aoClicar, dataHora, decimal, formaDoPedido, hojeISO, hora, html, modal, moeda, renderizar, rotulo, somarDias, toast, toastErro } from '../ui.js';
 import { dadosLoja, imprimirConta } from '../imprimir.js';
 import { ouvir } from '../tempo-real.js';
 
 const FORMAS = ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO'];
 const CLASSE_STATUS = { EM_PREPARO: 'badge-warn', PRONTO: 'badge-good', ENTREGUE: '', CANCELADO: 'badge-bad' };
 
+const centavos = (v) => Math.round(v * 100) / 100;
 const minutosDesde = (iso) => Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
 // Mesmos atalhos de período da tela Financeiro
 const PERIODOS = [
@@ -91,7 +92,7 @@ export async function montar(container) {
                     ? html` <span class="badge badge-bad" title="${c.motivoCancelamento || ''}">cancelada</span>` : ''}</td>
                   <td class="num muted">${hora(c.abertaEm)}</td>
                   <td class="num">${hora(c.fechadaEm)}</td>
-                  <td>${c.formaPagamento ? rotulo(c.formaPagamento) : '—'}</td>
+                  <td>${c.formaPagamento ? formaDoPedido(c) : '—'}</td>
                   <td class="num right">${moeda(c.consumo)}</td>
                   <td class="num right">${c.status === 'FECHADA' ? (Number(c.valorServico) ? moeda(c.valorServico) : html`<span class="muted">não cobrado</span>`) : '—'}</td>
                   <td class="num right"><strong>${c.status === 'FECHADA' ? moeda(c.valorTotal) : '—'}</strong></td>
@@ -164,7 +165,7 @@ export async function montar(container) {
               ${c.status === 'FECHADA' ? html`<div class="card" style="background:var(--surface-2);margin-top:12px">
                 <div class="cupom-linha"><span>Consumo</span><span class="num">${moeda(c.consumo)}</span></div>
                 <div class="cupom-linha"><span>Serviço</span><span class="num">${Number(c.valorServico) ? moeda(c.valorServico) : 'não cobrado'}</span></div>
-                <div class="cupom-linha total"><span>Total · ${rotulo(c.formaPagamento)}</span><span class="num">${moeda(c.valorTotal)}</span></div>
+                <div class="cupom-linha total"><span>Total · ${formaDoPedido(c)}</span><span class="num">${moeda(c.valorTotal)}</span></div>
               </div>` : ''}
             </div>
             <div>
@@ -235,9 +236,10 @@ export async function abrirContaComanda(c, aoMudar = async () => {}) {
           <div class="card" style="background:var(--surface-2)" data-totais>${totaisHtml(c, loja.servicoMarcado)}</div>
           <div>
             <div class="muted" style="font-size:.8rem;margin-bottom:4px">Forma de pagamento</div>
-            <div class="segmented" data-formas>${FORMAS.map((f, i) => html`
-              <label class="seg-opcao"><input type="radio" name="formaPagamento" value="${f}" ${i === 0 ? 'checked' : ''}><span>${rotulo(f)}</span></label>`)}</div>
+            <div class="segmented" data-formas>${[...FORMAS, 'DIVIDIDO'].map((f, i) => html`
+              <label class="seg-opcao"><input type="radio" name="formaPagamento" value="${f}" ${i === 0 ? 'checked' : ''}><span>${f === 'DIVIDIDO' ? '➗ Dividir' : rotulo(f)}</span></label>`)}</div>
           </div>
+          <div class="card stack hidden" style="padding:10px;gap:8px" data-divisao></div>
           <div class="stack hidden" data-dinheiro>
             <label class="field">Cliente entregou (R$)
               <input name="valorRecebido" inputmode="decimal" placeholder="Ex.: 100" autocomplete="off"></label>
@@ -253,15 +255,95 @@ export async function abrirContaComanda(c, aoMudar = async () => {}) {
       </div>`,
     textoSalvar: 'Fechar conta',
     aoAbrir: (form) => {
-      const total = () => Number(c.consumo) + (form.cobrarServico.checked ? Number(c.valorServico) : 0);
-      const atualizar = () => {
+      const total = () => centavos(Number(c.consumo) + (form.cobrarServico.checked ? Number(c.valorServico) : 0));
+      const dividido = () => form.formaPagamento.value === 'DIVIDIDO';
+      // Conta dividida: [{ forma, valor }]; auto = ainda é a divisão igual (acompanha o total ao mudar o serviço)
+      const divisao = { partes: [], pessoas: 2, auto: true };
+      const somaPartes = () => centavos(divisao.partes.reduce((s, p) => s + (decimal(p.valor) || 0), 0));
+      const emDinheiro = () => (dividido()
+        ? centavos(divisao.partes.filter((p) => p.forma === 'DINHEIRO').reduce((s, p) => s + (decimal(p.valor) || 0), 0))
+        : form.formaPagamento.value === 'DINHEIRO' ? total() : 0);
+      const painel = form.querySelector('[data-divisao]');
+
+      function dividirIgual(n) {
+        const qtd = Math.min(Math.max(Math.round(n) || 2, 2), 10);
+        const base = Math.floor(total() * 100 / qtd) / 100;
+        divisao.pessoas = qtd;
+        divisao.partes = Array.from({ length: qtd }, (_, i) => ({
+          forma: divisao.partes[i]?.forma ?? 'PIX',
+          valor: (i === qtd - 1 ? centavos(total() - base * (qtd - 1)) : base).toFixed(2).replace('.', ','),
+        }));
+        divisao.auto = true;
+      }
+      const faltaHtml = () => {
+        const diferenca = centavos(total() - somaPartes());
+        if (Math.abs(diferenca) < 0.005) return html`<span class="good">✓ fecha ${moeda(total())}</span>`;
+        return diferenca > 0 ? html`<span class="bad">Falta ${moeda(diferenca)}</span>` : html`<span class="bad">Passou ${moeda(-diferenca)}</span>`;
+      };
+      const desenharDivisao = () => {
+        painel.innerHTML = String(html`
+          <div class="row" style="flex-wrap:nowrap;align-items:center;gap:6px;font-size:.85rem">
+            Dividir igual em
+            <input data-pessoas type="number" min="2" max="10" value="${divisao.pessoas}" style="width:64px" aria-label="Quantas partes">
+            <button type="button" class="btn btn-sm" data-dividir-igual>Dividir</button>
+          </div>
+          ${divisao.partes.map((p, i) => html`
+            <div class="row" style="flex-wrap:nowrap;gap:6px">
+              <select data-parte-forma="${i}" aria-label="Forma da parte ${i + 1}">
+                ${FORMAS.map((f) => html`<option value="${f}" ${f === p.forma ? 'selected' : ''}>${rotulo(f)}</option>`)}
+              </select>
+              <input data-parte-valor="${i}" value="${p.valor}" inputmode="decimal" autocomplete="off" style="max-width:110px"
+                aria-label="Valor da parte ${i + 1}">
+              <button type="button" class="btn btn-icon btn-sm" data-remover-parte="${i}" aria-label="Tirar esta parte"
+                ${divisao.partes.length <= 2 ? 'disabled' : ''}>✕</button>
+            </div>`)}
+          <div class="row" style="align-items:center">
+            <button type="button" class="btn btn-sm" data-add-parte ${divisao.partes.length >= 10 ? 'disabled' : ''}>+ Parte</button>
+            <span class="spacer"></span><span data-falta style="font-size:.85rem">${faltaHtml()}</span>
+          </div>`);
+      };
+      painel.addEventListener('click', (ev) => {
+        if (ev.target.closest('[data-dividir-igual]')) dividirIgual(Number(painel.querySelector('[data-pessoas]').value));
+        else if (ev.target.closest('[data-add-parte]')) {
+          divisao.partes.push({ forma: 'PIX', valor: Math.max(centavos(total() - somaPartes()), 0).toFixed(2).replace('.', ',') });
+          divisao.auto = false;
+        } else if (ev.target.closest('[data-remover-parte]')) {
+          divisao.partes.splice(Number(ev.target.closest('[data-remover-parte]').dataset.removerParte), 1);
+          divisao.auto = false;
+        } else return;
+        desenharDivisao();
+        atualizar();
+      });
+
+      const atualizar = (ev) => {
+        const alvo = ev?.target;
+        if (alvo?.dataset?.parteValor != null) {
+          divisao.partes[Number(alvo.dataset.parteValor)].valor = alvo.value;
+          divisao.auto = false;
+        } else if (alvo?.dataset?.parteForma != null) {
+          divisao.partes[Number(alvo.dataset.parteForma)].forma = alvo.value;
+        } else if (alvo?.dataset?.pessoas != null) {
+          divisao.pessoas = Number(alvo.value) || divisao.pessoas;
+        } else if (dividido() && (!divisao.partes.length || divisao.auto) && (alvo?.name === 'formaPagamento' || alvo?.name === 'cobrarServico')) {
+          dividirIgual(divisao.partes.length || divisao.pessoas);
+          desenharDivisao();
+        }
         form.querySelector('[data-totais]').innerHTML = String(totaisHtml(c, form.cobrarServico.checked));
-        const dinheiro = form.formaPagamento.value === 'DINHEIRO';
-        form.querySelector('[data-dinheiro]').classList.toggle('hidden', !dinheiro);
-        form.querySelector('[data-troco]').innerHTML = String(trocoHtml(total(), decimal(form.valorRecebido.value)));
+        painel.classList.toggle('hidden', !dividido());
+        const falta = painel.querySelector('[data-falta]');
+        if (falta) falta.innerHTML = String(faltaHtml());
+        form.querySelector('[data-dinheiro]').classList.toggle('hidden', !emDinheiro());
+        form.querySelector('[data-troco]').innerHTML = String(trocoHtml(emDinheiro(), decimal(form.valorRecebido.value)));
       };
       form.addEventListener('input', atualizar);
       form.addEventListener('change', atualizar);
+      form.validarDivisao = () => {
+        if (dividido() && Math.abs(total() - somaPartes()) >= 0.005) {
+          throw new Error(`As partes somam ${moeda(somaPartes())}, mas o total é ${moeda(total())}.`);
+        }
+        return dividido() ? divisao.partes.map((p) => ({ forma: p.forma, valor: decimal(p.valor) })) : null;
+      };
+      form.emDinheiro = emDinheiro;
       form.querySelector('[data-previa]').addEventListener('click', () =>
         imprimirConta(c, { cobrarServico: form.cobrarServico.checked }).catch(toastErro));
       form.querySelector('[data-cancelar]')?.addEventListener('click', () => {
@@ -270,13 +352,16 @@ export async function abrirContaComanda(c, aoMudar = async () => {}) {
       });
     },
     aoSalvar: async (d, form) => {
+      const pagamentos = form.validarDivisao();
       const fechada = await api.post(`/comandas/${c.id}/fechar`, {
         formaPagamento: d.formaPagamento,
         cobrarServico: form.cobrarServico.checked,
-        valorRecebido: d.formaPagamento === 'DINHEIRO' ? decimal(d.valorRecebido) : null,
+        valorRecebido: form.emDinheiro() ? decimal(d.valorRecebido) : null,
+        pagamentos,
       });
-      toast(`${fechada.identificacao} fechada: ${moeda(fechada.valorTotal)} no ${rotulo(fechada.formaPagamento)}`
-        + (fechada.troco != null ? ` · troco ${moeda(fechada.troco)}` : ''));
+      toast(`${fechada.identificacao} fechada: ${moeda(fechada.valorTotal)} ${pagamentos
+        ? `dividida (${fechada.pagamentos.map((x) => `${rotulo(x.forma)} ${moeda(x.valor)}`).join(' + ')})`
+        : `no ${rotulo(fechada.formaPagamento)}`}` + (fechada.troco != null ? ` · troco ${moeda(fechada.troco)}` : ''));
       if (form.imprimir.checked) await imprimirConta(fechada);
       await aoMudar();
     },

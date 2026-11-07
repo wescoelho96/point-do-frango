@@ -1,5 +1,6 @@
 package com.pointdofrango.financeiro;
 
+import com.pointdofrango.shared.Dinheiro;
 import jakarta.persistence.Embeddable;
 
 import java.math.BigDecimal;
@@ -22,6 +23,19 @@ public record DistribuicaoFinanceira(
 
     public BigDecimal valorBruto() {
         return taxaPagamento.add(reposicaoEstoque).add(contasFixas).add(lucroLiquido);
+    }
+
+    /** Tira do lucro o que vai para as contas fixas e refaz pró-labore e reserva. */
+    public DistribuicaoFinanceira comContas(BigDecimal valor, BigDecimal percentualProLabore) {
+        BigDecimal contas = contasFixas.add(valor);
+        BigDecimal lucro = lucroLiquido.subtract(valor);
+        BigDecimal proLabore = BigDecimal.ZERO.setScale(2);
+        BigDecimal reserva = BigDecimal.ZERO.setScale(2);
+        if (lucro.signum() > 0) {
+            proLabore = Dinheiro.percentual(lucro, percentualProLabore);
+            reserva = lucro.subtract(proLabore);
+        }
+        return new DistribuicaoFinanceira(taxaPagamento, reposicaoEstoque, contas, lucro, proLabore, reserva);
     }
 
     public boolean prejuizo() {

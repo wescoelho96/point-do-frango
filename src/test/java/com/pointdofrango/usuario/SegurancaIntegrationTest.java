@@ -12,6 +12,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -236,5 +237,33 @@ class SegurancaIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("X-Frame-Options", "DENY"))
                 .andExpect(header().exists("Content-Security-Policy"));
+    }
+
+    @Test
+    @DisplayName("Trocar a senha, desativar ou mudar o perfil derruba na hora os tokens já emitidos")
+    void sessaoRevogada() throws Exception {
+        usuarios.garantirUsuario("Revogar", "revogar-teste", "senha-antiga-1", Perfil.ATENDENTE);
+        String antigo = token("revogar-teste", "senha-antiga-1");
+        mvc.perform(get("/api/v1/usuarios/me").header("Authorization", "Bearer " + antigo)).andExpect(status().isOk());
+
+        Thread.sleep(1100); // o token tem precisão de segundos
+        usuarios.trocarSenha("revogar-teste", "senha-antiga-1", "senha-nova-12");
+        mvc.perform(get("/api/v1/usuarios/me").header("Authorization", "Bearer " + antigo)).andExpect(status().isUnauthorized());
+        Thread.sleep(1100);
+        String novo = token("revogar-teste", "senha-nova-12");
+        mvc.perform(get("/api/v1/usuarios/me").header("Authorization", "Bearer " + novo)).andExpect(status().isOk());
+
+        Long id = usuarios.buscarPorUsername("revogar-teste").getId();
+        usuarios.alterarAtivo(id, false, "dono");
+        mvc.perform(get("/api/v1/usuarios/me").header("Authorization", "Bearer " + novo)).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("HTTPS atrás do proxy: HSTS, Permissions-Policy e sem documentação exposta fora do dev")
+    void cabecalhosHttps() throws Exception {
+        mvc.perform(get("/index.html").secure(true))
+                .andExpect(header().string("Strict-Transport-Security", containsString("max-age=31536000")))
+                .andExpect(header().exists("Permissions-Policy"))
+                .andExpect(header().string("Cross-Origin-Opener-Policy", "same-origin"));
     }
 }

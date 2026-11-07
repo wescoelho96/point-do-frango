@@ -9,6 +9,18 @@ const MENUS = [
   ['financeiro', 'Financeiro'], ['config', 'Config.'],
 ];
 
+const nomeMenu = (t) => {
+  const b = document.querySelector(`.nav-btn[data-view="${t}"] span`);
+  return b?.textContent || MENUS.find(([c]) => c === t)?.[1] || t;
+};
+
+// Telas que cada perfil pode receber (o backend bloqueia o resto por perfil, ex.: financeiro e clientes só o dono)
+const TELAS_DO_PERFIL = {
+  ADMIN: MENUS.map(([t]) => t),
+  ATENDENTE: ['pdv', 'comandas', 'cozinha', 'pedidos', 'entregas', 'caixa', 'estoque'],
+  COZINHA: ['cozinha'],
+};
+
 export async function montar(container) {
   let cfg; let despesas; let usuarios; let loja; let equipe;
 
@@ -20,10 +32,34 @@ export async function montar(container) {
     desenhar();
   }
 
+  // Mesma conta do ConfiguracaoFinanceira.diasDeTrabalho, para o mês atual
+  function diasDeTrabalho(dias) {
+    const hoje = new Date();
+    const ultimo = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
+    let n = 0;
+    for (let d = 1; d <= ultimo; d++) {
+      // getDay: 0 = domingo; DIAS começa na segunda
+      if (dias.includes(DIAS[(new Date(hoje.getFullYear(), hoje.getMonth(), d).getDay() + 6) % 7])) n++;
+    }
+    return n;
+  }
+
   // Mesmo cálculo do RateioFinanceiro.java, só para a pré-visualização
-  function exemplo(c) {
+  function exemplo(c, totalContas) {
     const bruto = 100; const cmv = 30;
     const taxa = bruto * c.taxaCredito / 100;
+    if (c.contasPrimeiro) {
+      const sobra = bruto - taxa - cmv;
+      const pro = sobra * c.percentualProLabore / 100;
+      const dias = diasDeTrabalho(c.diasTrabalho);
+      const cota = dias ? totalContas / dias : totalContas;
+      return html`Contas de ${moeda(totalContas)} ÷ ${dias} dias de trabalho neste mês =
+        <strong>${moeda(cota)} por dia</strong> para as contas.<br>
+        Venda de <strong>${moeda(bruto)}</strong> no crédito com custo de ${moeda(cmv)} →
+        taxa ${moeda(taxa)} · reposição ${moeda(cmv)} · sobra ${moeda(sobra)}.<br>
+        Enquanto a cota do dia não está paga, a sobra vai para <strong>contas</strong>.
+        Depois: pró-labore <strong>${moeda(pro)}</strong> · reserva ${moeda(sobra - pro)} a cada venda como essa.`;
+    }
     const contas = bruto * c.percentualContasFixas / 100;
     const lucro = bruto - taxa - cmv - contas;
     const pro = lucro > 0 ? lucro * c.percentualProLabore / 100 : 0;
@@ -31,6 +67,17 @@ export async function montar(container) {
       taxa ${moeda(taxa)} · reposição ${moeda(cmv)} · contas ${moeda(contas)} ·
       pró-labore <strong>${moeda(pro)}</strong> · reserva ${moeda(Math.max(lucro, 0) - pro)}
       ${lucro < 0 ? html` · <span class="bad">prejuízo de ${moeda(-lucro)}</span>` : ''}`;
+  }
+
+  const totalDasContas = () => despesas.filter((d) => d.ativa).reduce((s, d) => s + Number(d.valorMensal), 0);
+
+  function mensagemWhatsapp() {
+    return `Olá! Bem-vindo ao ${loja.nome} 🍗\nFaça seu pedido por aqui, já com a taxa de entrega do seu bairro:\n`
+      + `${location.origin}/pedir\nO pedido vai direto para a cozinha. Qualquer dúvida, é só responder esta mensagem.`;
+  }
+
+  async function copiar(texto) {
+    try { await navigator.clipboard.writeText(texto); toast('Copiado'); } catch { toast('Não deu para copiar: selecione e copie à mão', 'erro'); }
   }
 
   function desenhar() {
@@ -55,6 +102,22 @@ export async function montar(container) {
         </form>
 
         <div class="card stack">
+          <h2>🌐 Cardápio online</h2>
+          <p class="text-2" style="margin:0">O cliente escolhe, vê a taxa de entrega do bairro e o pedido vai direto para a cozinha
+            (canal "Site" na tela de Pedidos). Só aceita pedidos com o caixa aberto.</p>
+          <div class="row" style="flex-wrap:nowrap;gap:6px">
+            <input value="${location.origin}/pedir" readonly aria-label="Link do cardápio online" data-link-site>
+            <button type="button" class="btn" data-acao="copiar-link">Copiar</button>
+            <a class="btn" href="/pedir" target="_blank" rel="noopener">Abrir</a>
+          </div>
+          <label class="field">Mensagem automática do WhatsApp Business
+            <textarea rows="4" readonly data-msg-site>${mensagemWhatsapp()}</textarea></label>
+          <p class="muted" style="margin:0;font-size:.8rem">No app WhatsApp Business: Ferramentas comerciais → Mensagem de saudação
+            (e Mensagem de ausência) → cole o texto acima.</p>
+          <div><button type="button" class="btn btn-sm" data-acao="copiar-msg">Copiar mensagem</button></div>
+        </div>
+
+        <div class="card stack">
           <h2>Impressora deste aparelho</h2>
           <p class="text-2" style="margin:0">Cada celular/PC guarda a sua. Use a largura da bobina da impressora térmica.</p>
           <div class="segmented">${['80', '58'].map((mm) => html`
@@ -66,8 +129,19 @@ export async function montar(container) {
 
         <form class="card stack" id="form-rateio">
           <h2>Rateio de cada venda</h2>
+          <label class="row" style="gap:8px;font-weight:600"><input type="checkbox" name="contasPrimeiro" style="width:auto"
+            ${cfg.contasPrimeiro ? 'checked' : ''}> Contas por dia trabalhado (recomendado)</label>
+          <p class="muted" style="margin:0;font-size:.82rem">As contas fixas do mês (${moeda(totalContas)}) viram uma cota por dia
+            de trabalho. A sobra de cada venda (o que fica depois da taxa e do custo dos insumos) paga a cota do dia e o que
+            faltou nos dias anteriores; o resto é o seu pró-labore e a reserva daquele dia.
+            Desmarcado, cada venda guarda um percentual fixo para as contas.</p>
+          <div class="stack" data-dias-trabalho ${cfg.contasPrimeiro ? '' : 'hidden'} style="gap:4px">
+            <span style="font-weight:600;font-size:.9rem">Dias em que a loja abre</span>
+            <div class="segmented">${DIAS.map((d) => html`
+              <label class="seg-opcao"><input type="checkbox" name="diaTrabalho" value="${d}" ${(cfg.diasTrabalho ?? DIAS).includes(d) ? 'checked' : ''}><span>${NOME_DIA[d]}</span></label>`)}</div>
+          </div>
           <div class="form-grid">
-            <label class="field">Contas fixas (% do faturamento)<input name="percentualContasFixas" inputmode="decimal" required value="${numero(cfg.percentualContasFixas, 2)}"></label>
+            <label class="field" data-percentual-contas ${cfg.contasPrimeiro ? 'hidden' : ''}>Contas fixas (% do faturamento)<input name="percentualContasFixas" inputmode="decimal" required value="${numero(cfg.percentualContasFixas, 2)}"></label>
             <label class="field">Pró-labore (% do lucro)<input name="percentualProLabore" inputmode="decimal" required value="${numero(cfg.percentualProLabore, 2)}"></label>
           </div>
           <p class="muted" style="margin:0;font-size:.85rem">O que sobra do lucro (${pct(cfg.percentualReserva)}) vai para a reserva de emergência.</p>
@@ -84,7 +158,7 @@ export async function montar(container) {
           </div>
           <p class="muted" style="margin:0;font-size:.8rem">Comissão + taxa de pagamento online do seu plano (ex.: iFood Plano Básico ≈ 12% + 3,2%).
             Serve só para sugerir o valor; no lançamento vale o que estiver no extrato do app.</p>
-          <div class="card" style="background:var(--surface-2);font-size:.9rem" data-exemplo>${exemplo(cfg)}</div>
+          <div class="card" style="background:var(--surface-2);font-size:.9rem" data-exemplo>${exemplo(cfg, totalContas)}</div>
           <p class="muted" style="margin:0;font-size:.8rem">Vale para os próximos pedidos. Os já lançados mantêm os valores da hora da venda.</p>
           <div><button class="btn btn-primary" type="submit">Salvar rateio</button></div>
         </form>
@@ -140,9 +214,11 @@ export async function montar(container) {
           <table><tbody>${usuarios.map((u) => html`
             <tr class="${u.ativo ? '' : 'inativo'}">
               <td><strong>${u.nome}</strong><div class="muted" style="font-size:.8rem">${u.username}</div></td>
-              <td>${rotulo(u.perfil)}</td>
+              <td>${rotulo(u.perfil)}<div class="muted" style="font-size:.78rem">${u.telas.length === TELAS_DO_PERFIL[u.perfil].length
+                ? 'todas as telas do perfil' : u.telas.map((t) => nomeMenu(t.toLowerCase())).join(', ')}</div></td>
               <td class="right">${u.username === sessao.get().username ? html`<span class="muted">você</span>`
-                : html`<button class="btn btn-sm" data-acao="ativo-usuario" data-id="${u.id}" data-v="${!u.ativo}">${u.ativo ? 'Desativar' : 'Reativar'}</button>`}</td>
+                : html`<button class="btn btn-sm" data-acao="acesso-usuario" data-id="${u.id}">🔐 Telas</button>
+                  <button class="btn btn-sm" data-acao="ativo-usuario" data-id="${u.id}" data-v="${!u.ativo}">${u.ativo ? 'Desativar' : 'Reativar'}</button>`}</td>
             </tr>`)}</tbody></table>
           <div><button class="btn btn-sm" data-acao="senha">Trocar minha senha</button></div>
         </div>
@@ -181,12 +257,23 @@ export async function montar(container) {
     });
 
     const form = container.querySelector('#form-rateio');
-    const ler = () => Object.fromEntries([...new FormData(form)].map(([k, v]) => [k, decimal(v)]));
+    const ler = () => ({
+      ...Object.fromEntries([...new FormData(form)].filter(([k]) => !['contasPrimeiro', 'diaTrabalho'].includes(k))
+        .map(([k, v]) => [k, decimal(v)])),
+      contasPrimeiro: form.contasPrimeiro.checked,
+      diasTrabalho: new FormData(form).getAll('diaTrabalho'),
+    });
     form.addEventListener('input', () => {
-      container.querySelector('[data-exemplo]').innerHTML = String(exemplo(ler()));
+      container.querySelector('[data-percentual-contas]').hidden = form.contasPrimeiro.checked;
+      container.querySelector('[data-dias-trabalho]').hidden = !form.contasPrimeiro.checked;
+      container.querySelector('[data-exemplo]').innerHTML = String(exemplo(ler(), totalDasContas()));
     });
     form.addEventListener('submit', async (ev) => {
       ev.preventDefault();
+      if (form.contasPrimeiro.checked && !ler().diasTrabalho.length) {
+        toast('Marque ao menos um dia em que a loja abre');
+        return;
+      }
       try {
         cfg = await api.put('/financeiro/configuracao', ler());
         toast('Rateio atualizado');
@@ -274,6 +361,50 @@ export async function montar(container) {
           <strong>Cozinha:</strong> só vê a fila da cozinha (para o PC/celular que fica lá).</p>`,
       aoSalvar: async (x) => { await api.post('/usuarios', x); toast('Usuário criado'); await carregar(); },
     }),
+    'copiar-link': () => copiar(`${location.origin}/pedir`),
+    'copiar-msg': () => copiar(mensagemWhatsapp()),
+    'acesso-usuario': (el) => {
+      const u = usuarios.find((x) => x.id === Number(el.dataset.id));
+      const marcadas = new Set(u.telas.map((t) => t.toLowerCase()));
+      modal({
+        titulo: `Acesso de ${u.nome}`,
+        corpo: html`
+          <label class="field">Perfil<select name="perfil">${['ATENDENTE', 'COZINHA', 'ADMIN'].map((p) => html`
+            <option value="${p}" ${p === u.perfil ? 'selected' : ''}>${rotulo(p)}</option>`)}</select></label>
+          <div>
+            <div class="muted" style="font-size:.8rem;margin-bottom:6px">Telas que aparecem no menu deste login</div>
+            <div class="menus-grid" data-telas>${MENUS.map(([t]) => html`
+              <label class="row" style="gap:8px"><input type="checkbox" name="tela-${t}" data-tela="${t}" style="width:auto"
+                ${marcadas.has(t) ? 'checked' : ''}> ${nomeMenu(t)}</label>`)}</div>
+          </div>
+          <p class="muted" style="margin:0;font-size:.82rem" data-dica></p>`,
+        aoAbrir: (form) => {
+          const ajustar = () => {
+            const pode = TELAS_DO_PERFIL[form.perfil.value];
+            form.querySelectorAll('[data-tela]').forEach((c) => {
+              c.disabled = !pode.includes(c.dataset.tela);
+              if (c.disabled) c.checked = false;
+            });
+            form.querySelector('[data-dica]').textContent = form.perfil.value === 'ADMIN'
+              ? 'Administrador vê custos, lucro e o financeiro e pode cancelar pedidos.'
+              : 'Clientes, Cardápio, Financeiro e Config. são só do administrador, porque mostram custos e dados dos clientes.';
+          };
+          form.perfil.addEventListener('change', () => {
+            ajustar();
+            // ao trocar de perfil, já vem com tudo que o novo perfil pode
+            form.querySelectorAll('[data-tela]:not(:disabled)').forEach((c) => { c.checked = true; });
+          });
+          ajustar();
+        },
+        aoSalvar: async (x, form) => {
+          const telas = [...form.querySelectorAll('[data-tela]:checked')].map((c) => c.dataset.tela.toUpperCase());
+          if (!telas.length) throw new Error('Marque pelo menos uma tela.');
+          await api.put(`/usuarios/${u.id}/acesso`, { perfil: x.perfil, telas });
+          toast(`Acesso de ${u.nome} salvo. Vale na próxima vez que a tela dele carregar.`);
+          await carregar();
+        },
+      });
+    },
     'ativo-usuario': async (el) => {
       try { await api.patch(`/usuarios/${el.dataset.id}/ativo?valor=${el.dataset.v}`); await carregar(); } catch (e) { toastErro(e); }
     },
@@ -282,7 +413,11 @@ export async function montar(container) {
       corpo: html`
         <label class="field">Senha atual<input name="senhaAtual" type="password" required autocomplete="current-password"></label>
         <label class="field">Nova senha (mín. 8)<input name="novaSenha" type="password" required minlength="8" autocomplete="new-password"></label>`,
-      aoSalvar: async (x) => { await api.put('/usuarios/me/senha', x); toast('Senha alterada'); },
+      aoSalvar: async (x) => {
+        await api.put('/usuarios/me/senha', x);
+        toast('Senha alterada. Por segurança, os outros aparelhos saem e você entra de novo com a senha nova.');
+        setTimeout(() => location.reload(), 2500);
+      },
     }),
   });
 

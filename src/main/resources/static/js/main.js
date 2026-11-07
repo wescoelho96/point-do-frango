@@ -1,6 +1,6 @@
 import { api, sessao, quandoSessaoExpirar } from './api.js';
-import { rotularTabelas, rotulo, toast, toastErro } from './ui.js';
-import { conectar, desconectar, liberarAudio } from './tempo-real.js';
+import { moeda, rotularTabelas, rotulo, toast, toastErro } from './ui.js';
+import { conectar, desconectar, liberarAudio, ouvir, tocarAlerta } from './tempo-real.js';
 import { dadosLoja } from './imprimir.js';
 import * as pdv from './views/pdv.js';
 import * as comandas from './views/comandas.js';
@@ -24,6 +24,19 @@ const PERMITIDAS = {
   COZINHA: ['cozinha'],
 };
 const INICIAL = { ADMIN: 'pdv', ATENDENTE: 'pdv', COZINHA: 'cozinha' };
+
+/** O que o perfil pode, reduzido às telas que o dono liberou para este login. */
+function telasDoLogin() {
+  const s = sessao.get();
+  const doPerfil = PERMITIDAS[s?.perfil] ?? [];
+  const liberadas = s?.telas?.map((t) => t.toLowerCase());
+  return liberadas ? doPerfil.filter((t) => liberadas.includes(t)) : doPerfil;
+}
+
+function aplicarMenu() {
+  const permitidas = telasDoLogin();
+  document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('hidden', !permitidas.includes(b.dataset.view)));
+}
 
 const $ = (id) => document.getElementById(id);
 let limparTelaAtual = null;
@@ -53,9 +66,20 @@ function mostrarApp() {
   $('app').classList.remove('hidden');
   $('usuario-nome').textContent = s.nome;
   $('usuario-perfil').textContent = rotulo(s.perfil);
-  const permitidas = PERMITIDAS[s.perfil] ?? [];
-  document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('hidden', !permitidas.includes(b.dataset.view)));
+  aplicarMenu();
   document.body.dataset.perfil = s.perfil;
+  // O dono pode ter mudado as telas (ou o perfil) depois do login deste aparelho
+  api.get('/usuarios/me').then((eu) => {
+    if (eu.perfil !== s.perfil) {
+      toast('Seu acesso foi alterado pelo dono. Entre de novo.', 'erro');
+      sair();
+      return;
+    }
+    if (JSON.stringify(eu.telas) === JSON.stringify(s.telas)) return;
+    sessao.atualizar({ telas: eu.telas });
+    aplicarMenu();
+    abrirTela(location.hash.slice(1));
+  }).catch(() => {});
   if (s.perfil !== 'COZINHA') dadosLoja(true).then((l) => aplicarNomesMenu(l.menus)).catch(() => {});
   conectar();
   abrirTela(location.hash.slice(1));
@@ -71,8 +95,9 @@ async function abrirTela(hash) {
   const minha = ++navegacao;
   const perfil = sessao.perfil();
   let { nome, params } = lerRota(hash || '');
-  if (!TELAS[nome] || !(PERMITIDAS[perfil] ?? []).includes(nome)) {
-    nome = INICIAL[perfil] ?? 'pdv';
+  const permitidas = telasDoLogin();
+  if (!TELAS[nome] || !permitidas.includes(nome)) {
+    nome = permitidas.includes(INICIAL[perfil]) ? INICIAL[perfil] : permitidas[0] ?? 'pdv';
     params = {};
   }
   const destino = `#${nome}${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ''}`;
@@ -97,6 +122,18 @@ async function abrirTela(hash) {
   }
 }
 
+// Pedido feito pelo cliente no site: avisa quem está no balcão (a cozinha já recebe pela fila)
+ouvir(async ({ tipo, id }) => {
+  const perfil = sessao.perfil();
+  if (tipo !== 'PEDIDO_NOVO' || !id || (perfil !== 'ADMIN' && perfil !== 'ATENDENTE')) return;
+  try {
+    const p = await api.get(`/pedidos/${id}`);
+    if (p.canal !== 'SITE') return;
+    tocarAlerta();
+    toast(`🌐 Pedido do site #${p.id}: ${p.clienteNome ?? ''} · ${moeda(p.totalACobrar)} · ${p.entrega ? 'entrega' : 'retirada'}`);
+  } catch { /* sem acesso ou pedido já cancelado */ }
+});
+
 function sair() {
   desconectar();
   sessao.limpar();
@@ -115,7 +152,7 @@ $('form-login').addEventListener('submit', async (ev) => {
   entrar.disabled = true;
   try {
     const r = await api.post('/auth/login', { username: form.username.value, senha: form.senha.value });
-    sessao.set({ token: r.token, nome: r.nome, perfil: r.perfil, username: r.username, expiraEm: r.expiraEm },
+    sessao.set({ token: r.token, nome: r.nome, perfil: r.perfil, username: r.username, expiraEm: r.expiraEm, telas: r.telas },
       form.lembrar.checked);
     form.reset();
     mostrarSenha(false);

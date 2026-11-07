@@ -24,6 +24,9 @@ spring:
 
 server:
   port: ${PORT:8080}
+  # Atrás do proxy do Render: o Tomcat lê X-Forwarded-For/Proto só de proxies internos (10.x, 172.16.x...),
+  # então o IP do cliente não pode ser forjado e a requisição é reconhecida como HTTPS (HSTS).
+  forward-headers-strategy: native
   mime-mappings:
     webmanifest: application/manifest+json
   error:

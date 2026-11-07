@@ -9,12 +9,14 @@ public enum CanalVenda {
     MESA(Grupo.LOJA),
     WHATSAPP(Grupo.WHATSAPP_TELEFONE),
     TELEFONE(Grupo.WHATSAPP_TELEFONE),
+    /** Feito pelo próprio cliente no cardápio online (link mandado no WhatsApp). */
+    SITE(Grupo.WHATSAPP_TELEFONE),
     IFOOD(Grupo.IFOOD),
     NOVENTA_NOVE_FOOD(Grupo.NOVENTA_NOVE_FOOD);
 
     public enum Grupo {
         LOJA("Balcão / Mesa"),
-        WHATSAPP_TELEFONE("WhatsApp / Telefone"),
+        WHATSAPP_TELEFONE("WhatsApp / Telefone / Site"),
         IFOOD("iFood"),
         NOVENTA_NOVE_FOOD("99Food");
 

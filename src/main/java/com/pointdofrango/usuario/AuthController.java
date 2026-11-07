@@ -1,5 +1,6 @@
 package com.pointdofrango.usuario;
 
+import com.pointdofrango.usuario.UsuarioDtos.AcessoRequest;
 import com.pointdofrango.usuario.UsuarioDtos.LoginRequest;
 import com.pointdofrango.usuario.UsuarioDtos.LoginResponse;
 import com.pointdofrango.usuario.UsuarioDtos.NovoUsuarioRequest;
@@ -64,6 +65,12 @@ public class AuthController {
     @ResponseStatus(HttpStatus.CREATED)
     public UsuarioResponse criar(@Valid @RequestBody NovoUsuarioRequest req) {
         return UsuarioResponse.de(service.criar(req));
+    }
+
+    @PutMapping("/usuarios/{id}/acesso")
+    @Operation(summary = "Define o perfil e as telas que o login vê (só o dono)")
+    public UsuarioResponse definirAcesso(@PathVariable Long id, @Valid @RequestBody AcessoRequest req, Authentication auth) {
+        return UsuarioResponse.de(service.definirAcesso(id, req.perfil(), req.telas(), auth.getName()));
     }
 
     @PatchMapping("/usuarios/{id}/ativo")

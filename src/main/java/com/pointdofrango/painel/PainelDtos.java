@@ -52,10 +52,14 @@ public final class PainelDtos {
     public record Dia(LocalDate data, int pedidos, BigDecimal faturamento, BigDecimal lucroLiquido) {
     }
 
-    /** percentualSugerido = contas do mês / faturamento dos últimos 30 dias, o percentual que cobriria as contas. */
+    /**
+     * percentualSugerido = contas do mês / faturamento dos últimos 30 dias, o percentual que cobriria as contas.
+     * Contas por dia: cotaDiaria = contas / diasTrabalho; devidoAteHoje = cotas dos dias trabalhados até hoje.
+     */
     public record ContasDoMes(YearMonth mes, BigDecimal totalContas, BigDecimal separadoNoMes, BigDecimal faltaSeparar,
                               BigDecimal percentualCoberto, BigDecimal percentualConfigurado,
-                              BigDecimal percentualSugerido) {
+                              BigDecimal percentualSugerido, boolean contasPrimeiro, int diasTrabalho,
+                              BigDecimal cotaDiaria, BigDecimal devidoAteHoje) {
     }
 
     public record AlertaEstoque(Long insumoId, String insumo, BigDecimal estoqueAtual, BigDecimal estoqueMinimo,

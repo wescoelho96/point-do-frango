@@ -8,6 +8,9 @@ spring:
       maximum-pool-size: 5         # o plano gratuito do Supabase limita conexões
       minimum-idle: 1
 
+# Documentação da API só em desenvolvimento: em produção não expõe o mapa dos endpoints
 springdoc:
+  api-docs:
+    enabled: false
   swagger-ui:
-    enabled: true                  # só documenta; todos os endpoints de dados continuam exigindo token
+    enabled: false

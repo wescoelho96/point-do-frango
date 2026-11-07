@@ -123,6 +123,11 @@ export async function montar(container, params = {}) {
           <div class="card">
             <h2>Contas do mês (${c.mes.slice(5)}/${c.mes.slice(0, 4)})</h2>
             <p class="text-2" style="margin:6px 0 0">Guardado <strong>${moeda(c.separadoNoMes)}</strong> de <strong>${moeda(c.totalContas)}</strong></p>
+            ${c.contasPrimeiro ? html`<p style="margin:4px 0 0;font-size:.9rem">Cota de <strong>${moeda(c.cotaDiaria)}</strong> por dia
+              de trabalho (${c.diasTrabalho} dias no mês). Até hoje: ${moeda(c.devidoAteHoje)}
+              ${Number(c.separadoNoMes) + 0.005 >= Number(c.devidoAteHoje) ? html`<span class="good">✅ em dia</span>`
+                : html`<span class="bad">· faltam ${moeda(c.devidoAteHoje - c.separadoNoMes)}</span>`}</p>
+              <p class="muted" style="margin:4px 0 0;font-size:.82rem">Paga a cota do dia, o resto das vendas é pró-labore e reserva.</p>` : ''}
             <div class="progress" role="progressbar" aria-valuenow="${c.percentualCoberto}" aria-valuemin="0" aria-valuemax="100">
               <div style="width:${c.percentualCoberto}%"></div></div>
             <p class="muted" style="margin:0;font-size:.85rem">${Number(c.faltaSeparar) > 0

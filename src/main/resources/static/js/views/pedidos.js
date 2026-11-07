@@ -147,8 +147,8 @@ async function abrirPedidoDeApp(aoLancar) {
               <span class="muted" style="font-size:.78rem" data-dica-taxa></span></label>
           </div>
           <div class="card" style="background:var(--surface-2)" data-resumo></div>
-          <label class="row" style="gap:8px"><input type="checkbox" name="enviarParaCozinha" style="width:auto">
-            Enviar para a cozinha (deixe desmarcado se o pedido já saiu)</label>
+          <label class="row" style="gap:8px"><input type="checkbox" name="enviarParaCozinha" style="width:auto" checked>
+            Enviar para a cozinha (desmarque só se o pedido já saiu)</label>
         </div>
       </div>`,
     textoSalvar: 'Lançar pedido',
@@ -158,6 +158,12 @@ async function abrirPedidoDeApp(aoLancar) {
       const editado = { valorPedido: false, taxasPlataforma: false };
       form.valorPedido.addEventListener('input', () => { editado.valorPedido = true; });
       form.taxasPlataforma.addEventListener('input', () => { editado.taxasPlataforma = true; });
+      // Pedido de horas atrás (lançado depois, pelo extrato) normalmente já saiu
+      let cozinhaEditada = false;
+      form.enviarParaCozinha.addEventListener('change', () => { cozinhaEditada = true; });
+      form.realizadoEm.addEventListener('change', () => {
+        if (!cozinhaEditada) form.enviarParaCozinha.checked = Date.now() - new Date(form.realizadoEm.value) < 2 * 3600e3;
+      });
 
       const atualizar = () => {
         let cardapio = 0;
@@ -185,7 +191,8 @@ async function abrirPedidoDeApp(aoLancar) {
         let potes = '';
         if (cfg && vendido > 0) {
           // Mesma conta do RateioFinanceiro.calcularComTaxa (só pré-visualização)
-          const contas = (vendido * Number(cfg.percentualContasFixas)) / 100;
+          // contas primeiro: a sobra vai para as contas até o mês estar pago (aqui só a sobra aparece como lucro)
+          const contas = cfg.contasPrimeiro ? 0 : (vendido * Number(cfg.percentualContasFixas)) / 100;
           const lucro = vendido - taxas - cmv - contas;
           const pro = lucro > 0 ? (lucro * Number(cfg.percentualProLabore)) / 100 : 0;
           potes = blocoPotes({ taxaPagamento: taxas, reposicaoEstoque: cmv, contasFixas: contas, lucroLiquido: lucro,

@@ -5,6 +5,8 @@ import com.pointdofrango.shared.RegraDeNegocioException;
 import com.pointdofrango.usuario.UsuarioDtos.LoginRequest;
 import com.pointdofrango.usuario.UsuarioDtos.LoginResponse;
 import com.pointdofrango.usuario.UsuarioDtos.NovoUsuarioRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.LockedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -17,6 +19,8 @@ import java.util.List;
 
 @Service
 public class UsuarioService {
+
+    private static final Logger log = LoggerFactory.getLogger(UsuarioService.class);
 
     private final UsuarioRepository usuarios;
     private final PasswordEncoder encoder;
@@ -52,7 +56,7 @@ public class UsuarioService {
         tentativas.sucesso(username);
         TokenService.TokenEmitido token = tokens.emitir(usuario);
         return new LoginResponse(token.token(), token.expiraEm(), usuario.getUsername(), usuario.getNome(),
-                usuario.getPerfil());
+                usuario.getPerfil(), usuario.telas());
     }
 
     @Transactional(readOnly = true)
@@ -82,6 +86,24 @@ public class UsuarioService {
             throw new RegraDeNegocioException("Você não pode desativar o próprio usuário.");
         }
         usuario.alterarAtivo(ativo);
+        if (!ativo) {
+            usuario.encerrarSessoes(Instant.now(clock));
+        }
+    }
+
+    @Transactional
+    public Usuario definirAcesso(Long id, Perfil perfil, List<Tela> telas, String quemPediu) {
+        Usuario usuario = usuarios.findById(id).orElseThrow(() -> new RecursoNaoEncontradoException("Usuário", id));
+        if (usuario.getUsername().equals(quemPediu) && perfil != usuario.getPerfil()) {
+            throw new RegraDeNegocioException("Você não pode mudar o perfil do próprio usuário.");
+        }
+        boolean mudouPerfil = perfil != usuario.getPerfil();
+        usuario.definirAcesso(perfil, telas);
+        if (mudouPerfil) {
+            usuario.encerrarSessoes(Instant.now(clock));
+        }
+        log.info("Acesso de {} alterado por {}: {} {}", usuario.getUsername(), quemPediu, perfil, usuario.telas());
+        return usuario;
     }
 
     @Transactional
@@ -90,7 +112,7 @@ public class UsuarioService {
         if (!encoder.matches(senhaAtual, usuario.getSenhaHash())) {
             throw new RegraDeNegocioException("Senha atual incorreta.");
         }
-        usuario.trocarSenha(encoder.encode(novaSenha));
+        usuario.trocarSenha(encoder.encode(novaSenha), Instant.now(clock));
     }
 
     /** Usado na inicialização. */

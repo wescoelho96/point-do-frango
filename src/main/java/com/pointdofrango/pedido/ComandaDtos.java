@@ -1,6 +1,8 @@
 package com.pointdofrango.pedido;
 
 import com.pointdofrango.financeiro.FormaPagamento;
+import com.pointdofrango.pedido.PedidoDtos.ParteRequest;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
@@ -21,8 +23,10 @@ public final class ComandaDtos {
     public record AbrirRequest(@NotBlank @Size(max = 50) String identificacao, @Size(max = 255) String observacao) {
     }
 
+    /** pagamentos só com formaPagamento DIVIDIDO: as partes somam o total com serviço. */
     public record FecharRequest(@NotNull FormaPagamento formaPagamento, boolean cobrarServico,
-                                @DecimalMin("0") @DecimalMax("99999") BigDecimal valorRecebido) {
+                                @DecimalMin("0") @DecimalMax("99999") BigDecimal valorRecebido,
+                                @Size(max = 20) List<@Valid ParteRequest> pagamentos) {
     }
 
     public record CancelarRequest(@NotBlank @Size(max = 255) String motivo) {
@@ -43,7 +47,8 @@ public final class ComandaDtos {
                                   FormaPagamento formaPagamento, BigDecimal consumo, BigDecimal percentualServico,
                                   BigDecimal valorServico, BigDecimal totalComServico, Boolean cobrarServico,
                                   BigDecimal valorTotal, String motivoCancelamento, List<ItemConta> itens,
-                                  List<PedidoDaComanda> pedidos, BigDecimal valorRecebido, BigDecimal troco) {
+                                  List<PedidoDaComanda> pedidos, BigDecimal valorRecebido, BigDecimal troco,
+                                  List<PedidoDtos.ParteResponse> pagamentos) {
 
         public static ComandaResponse de(Comanda c, BigDecimal percentualServicoAtual) {
             boolean aberta = c.getStatus() == StatusComanda.ABERTA;
@@ -54,7 +59,8 @@ public final class ComandaDtos {
                     c.getAbertaEm(), c.getFechadaPor(), c.getFechadaEm(), c.getFormaPagamento(), consumo, percentual,
                     aberta ? servico : c.getValorServico(), consumo.add(servico), c.getCobrarServico(),
                     aberta ? null : c.getValorTotal(), c.getMotivoCancelamento(), agrupar(c), pedidos(c),
-                    c.getValorRecebido(), c.troco());
+                    c.getValorRecebido(), c.troco(), c.getFormaPagamento() != FormaPagamento.DIVIDIDO ? null
+                            : c.getPartes().stream().map(x -> new PedidoDtos.ParteResponse(x.getForma(), x.getValor())).toList());
         }
 
         private static List<ItemConta> agrupar(Comanda c) {

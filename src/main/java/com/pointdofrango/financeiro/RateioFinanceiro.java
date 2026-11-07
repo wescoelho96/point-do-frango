@@ -13,6 +13,8 @@ import java.math.BigDecimal;
  * </pre>
  *
  * Lucro e reserva saem por subtração, então o arredondamento não perde nem cria centavos.
+ * No modo "contas primeiro" o pote de contas sai zerado aqui e é preenchido depois, pela sobra
+ * da venda, até cobrir as contas do mês ({@link DistribuicaoFinanceira#comContas}).
  */
 public final class RateioFinanceiro {
 
@@ -31,7 +33,8 @@ public final class RateioFinanceiro {
         BigDecimal bruto = Dinheiro.centavos(valorBruto);
         BigDecimal taxa = Dinheiro.centavos(taxaEmReais);
         BigDecimal reposicao = Dinheiro.centavos(cmv);
-        BigDecimal contas = Dinheiro.percentual(bruto, config.getPercentualContasFixas());
+        BigDecimal contas = config.isContasPrimeiro() ? BigDecimal.ZERO.setScale(2)
+                : Dinheiro.percentual(bruto, config.getPercentualContasFixas());
         BigDecimal lucro = bruto.subtract(taxa).subtract(reposicao).subtract(contas);
 
         BigDecimal proLabore = BigDecimal.ZERO.setScale(2);

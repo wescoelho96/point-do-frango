@@ -35,9 +35,11 @@ public class ComandaService {
     private final ApplicationEventPublisher eventos;
     private final Clock clock;
     private final ZoneId zona;
+    private final ContasPrimeiro contasPrimeiro;
 
     public ComandaService(ComandaRepository comandas, PedidoService pedidoService, ConfiguracaoFinanceiraService financeiro,
-                          LojaService loja, ApplicationEventPublisher eventos, Clock clock, ZoneId zona) {
+                          LojaService loja, ApplicationEventPublisher eventos, Clock clock, ZoneId zona,
+                          ContasPrimeiro contasPrimeiro) {
         this.comandas = comandas;
         this.pedidoService = pedidoService;
         this.financeiro = financeiro;
@@ -45,6 +47,7 @@ public class ComandaService {
         this.eventos = eventos;
         this.clock = clock;
         this.zona = zona;
+        this.contasPrimeiro = contasPrimeiro;
     }
 
     @Transactional
@@ -88,12 +91,18 @@ public class ComandaService {
         return fechar(id, forma, cobrarServico, null, usuario);
     }
 
-    /** valorRecebido só vale para dinheiro, para calcular o troco. */
-    @Transactional
     public Comanda fechar(Long id, FormaPagamento forma, boolean cobrarServico, BigDecimal valorRecebido, String usuario) {
+        return fechar(id, forma, cobrarServico, valorRecebido, List.of(), usuario);
+    }
+
+    /** valorRecebido só vale para a parte em dinheiro, para calcular o troco; partes só na conta dividida. */
+    @Transactional
+    public Comanda fechar(Long id, FormaPagamento forma, boolean cobrarServico, BigDecimal valorRecebido,
+                          List<PartePagamento> partes, String usuario) {
         Comanda comanda = buscar(id);
-        comanda.fechar(forma, cobrarServico, loja.obter().getPercentualServico(), valorRecebido, financeiro.obter(),
-                usuario, Instant.now(clock));
+        comanda.fechar(forma, cobrarServico, loja.obter().getPercentualServico(), valorRecebido, partes,
+                financeiro.obter(), usuario, Instant.now(clock));
+        contasPrimeiro.aplicar(comanda.pedidosValidos());
         log.info("Comanda #{} ({}) fechada por {}: itens={} serviço={} total={} {}", id, comanda.getIdentificacao(),
                 usuario, comanda.getValorItens(), comanda.getValorServico(), comanda.getValorTotal(), forma);
         avisar(comanda);

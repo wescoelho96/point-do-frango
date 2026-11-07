@@ -76,7 +76,7 @@ export async function imprimirConta(c, { cobrarServico = true } = {}) {
       : linha('Serviço', 'não cobrado')}
     ${linha('TOTAL', moeda(total), 'cupom-total')}
     ${!fechada && servico > 0 ? html`<div class="cupom-pequeno">Sem a taxa de serviço: ${moeda(c.consumo)}</div>` : ''}
-    ${fechada ? linha('Pagamento', rotulo(c.formaPagamento)) : ''}
+    ${fechada ? linha('Pagamento', formaDoPedido(c)) : ''}
     ${fechada && c.valorRecebido != null ? html`${linha('Recebido', moeda(c.valorRecebido))}${linha('Troco', moeda(c.troco))}` : ''}
     ${rodape(l)}`);
 }

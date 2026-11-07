@@ -69,7 +69,8 @@ class PedidoPlataformaIntegrationTest {
         assertThat(p.valorCardapio()).isEqualByComparingTo("38.00");
         assertThat(p.getDistribuicao().taxaPagamento()).isEqualByComparingTo("6.84");
         assertThat(p.getDistribuicao().reposicaoEstoque()).isEqualByComparingTo("12.50");
-        assertThat(p.getDistribuicao().contasFixas()).isEqualByComparingTo("9.00");  // 20% de 45
+        // contas primeiro: a sobra (45 − 6,84 − 12,50) vai para as contas e o resto para o lucro
+        assertThat(p.getDistribuicao().contasFixas().add(p.getDistribuicao().lucroLiquido())).isEqualByComparingTo("25.66");
         assertThat(p.getDistribuicao().valorBruto()).isEqualByComparingTo("45.00");
         assertThat(estoque.buscar(isca.getId()).getEstoqueAtual()).isEqualByComparingTo("9.5");
     }
@@ -145,7 +146,7 @@ class PedidoPlataformaIntegrationTest {
         List<Agrupamento> canais = painel.resumo(LocalDate.now(zona), LocalDate.now(zona)).porCanal();
 
         assertThat(canais).extracting(Agrupamento::rotulo)
-                .containsExactly("Balcão / Mesa", "WhatsApp / Telefone", "iFood", "99Food");
+                .containsExactly("Balcão / Mesa", "WhatsApp / Telefone / Site", "iFood", "99Food");
         Agrupamento ifood = canais.get(2);
         assertThat(ifood.pedidos()).isPositive();
         assertThat(ifood.taxas()).isGreaterThanOrEqualTo(bd("6.84"));

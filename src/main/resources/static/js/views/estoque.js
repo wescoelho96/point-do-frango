@@ -182,6 +182,25 @@ export async function montar(container, params = {}) {
       && (!termo || semAcento(`${i.nome} ${i.marca ?? ''} ${i.grupo ?? ''}`).includes(termo)));
   }
 
+  /**
+   * O saldo em vendas: "dá para 4 Batata grande · 9 Batata pequena" (o que mais gasta primeiro).
+   * Item fora de qualquer ficha técnica continua em dias de consumo.
+   */
+  function textoVendas(i) {
+    const usos = produtos.filter((p) => p.ativo).flatMap((p) => p.fichaTecnica
+      .filter((f) => f.insumoId === i.id && Number(f.quantidade) > 0)
+      .map((f) => ({ nome: p.nome, n: Math.floor((Math.max(Number(i.estoqueAtual), 0) + 0.00001) / Number(f.quantidade)) })));
+    const ind = indicadores.get(i.id);
+    const dias = ind?.coberturaDias != null ? `no ritmo atual, ${numero(ind.coberturaDias, 1)} dia(s)` : '';
+    if (!usos.length) return dias ? html`<span class="sub">dá para ${numero(ind.coberturaDias, 1)} dia(s)</span>` : '';
+    usos.sort((a, b) => a.n - b.n || a.nome.localeCompare(b.nome));
+    const mostrar = usos.slice(0, 3);
+    if (mostrar.every((u) => u.n === 0)) return html`<div class="sub bad" title="${dias}">não dá para nenhuma venda</div>`;
+    return html`<div class="sub" title="${dias}">dá para:${mostrar.map((u) => html`
+      <div class="${u.n === 0 ? 'bad' : ''}"><strong>${u.n}×</strong> ${u.nome}</div>`)}${usos.length > 3
+      ? html`<div>+${usos.length - 3} produto(s)</div>` : ''}</div>`;
+  }
+
   function linhaInsumo(i) {
     return html`
       <tr class="${i.ativo ? '' : 'inativo'}">
@@ -191,8 +210,7 @@ export async function montar(container, params = {}) {
               ? `${numero(i.unidadeUsoPorUnidade, 2)} ${plural(i.unidadeUsoNome, 2)}/${i.sigla}` : ''}</div>` : ''}</td>
         <td class="num right">${numero(i.estoqueAtual)} ${i.sigla}
           ${i.ativo && i.abaixoDoMinimo ? html` <span class="badge badge-bad">⚠ repor</span>` : ''}
-          ${i.ativo && indicadores.has(i.id) ? html`<div>${seloStatus(indicadores.get(i.id).status)}${indicadores.get(i.id).coberturaDias != null
-            ? html` <span class="sub">dá para ${numero(indicadores.get(i.id).coberturaDias, 1)} dia(s)</span>` : ''}</div>` : ''}
+          ${i.ativo && indicadores.has(i.id) ? html`<div>${seloStatus(indicadores.get(i.id).status)} ${textoVendas(i)}</div>` : ''}
           <div class="sub">mín. ${numero(i.estoqueMinimo)} ${i.sigla}${equivalencias(i) ? ` · ${equivalencias(i)}` : ''}</div>
           ${chegadas.has(i.id) ? linhaChegada(chegadas.get(i.id), i.sigla) : ''}</td>
         ${admin ? colunasDeCusto(i) : ''}

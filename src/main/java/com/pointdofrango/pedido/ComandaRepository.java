@@ -11,13 +11,13 @@ import java.util.Optional;
 
 public interface ComandaRepository extends JpaRepository<Comanda, Long> {
 
-    @EntityGraph(attributePaths = {"pedidos", "pedidos.itens"})
+    @EntityGraph(attributePaths = {"pedidos", "pedidos.itens", "partes"})
     Optional<Comanda> findWithPedidosById(Long id);
 
-    @EntityGraph(attributePaths = {"pedidos", "pedidos.itens"})
+    @EntityGraph(attributePaths = {"pedidos", "pedidos.itens", "partes"})
     List<Comanda> findByStatusOrderByAbertaEmAsc(StatusComanda status);
 
-    @EntityGraph(attributePaths = {"pedidos", "pedidos.itens"})
+    @EntityGraph(attributePaths = {"pedidos", "pedidos.itens", "partes"})
     @Query("select c from Comanda c where c.status <> com.pointdofrango.pedido.StatusComanda.ABERTA "
             + "and c.fechadaEm >= :inicio and c.fechadaEm < :fim order by c.fechadaEm desc")
     List<Comanda> encerradasNoPeriodo(Instant inicio, Instant fim);

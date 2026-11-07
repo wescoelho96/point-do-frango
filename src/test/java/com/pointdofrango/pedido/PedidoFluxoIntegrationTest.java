@@ -73,10 +73,9 @@ class PedidoFluxoIntegrationTest {
 
         var d = p.getDistribuicao();
         assertThat(d.reposicaoEstoque()).isEqualByComparingTo("14.00"); // 2 × R$ 7
-        assertThat(d.contasFixas()).isEqualByComparingTo("12.00");      // 20% de 60
-        assertThat(d.lucroLiquido()).isEqualByComparingTo("34.00");
-        assertThat(d.proLabore()).isEqualByComparingTo("27.20");
-        assertThat(d.reservaEmergencia()).isEqualByComparingTo("6.80");
+        // contas primeiro: a sobra de R$ 46 vai para as contas do mês até cobri-las; o resto é lucro
+        assertThat(d.contasFixas().add(d.lucroLiquido())).isEqualByComparingTo("46.00");
+        assertThat(d.proLabore().add(d.reservaEmergencia())).isEqualByComparingTo(d.lucroLiquido().max(BigDecimal.ZERO));
         assertThat(d.valorBruto()).isEqualByComparingTo(p.getValorTotal());
 
         assertThat(estoque.extrato(frango.getId()))
